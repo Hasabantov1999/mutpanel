@@ -3,11 +3,10 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-// Note: SQLite doesn't support enums, using String fields instead
 // Role: "ADMIN" | "USER"
 // MutStatus: "PENDING" | "APPROVED" | "REJECTED"
 

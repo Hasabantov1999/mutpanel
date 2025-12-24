@@ -2,8 +2,11 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Duralux - Authentication",
-  description: "Modern authentication system with Next.js",
+  title: "MUT Panel",
+  description: "MUT Yönetim Paneli",
+  icons: {
+    icon: "/favicon.png",
+  },
 };
 
 export default function RootLayout({
