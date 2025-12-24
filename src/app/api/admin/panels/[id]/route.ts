@@ -2,14 +2,10 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
-interface RouteParams {
-    params: { id: string }
-}
-
 // GET single panel
 export async function GET(
     request: NextRequest,
-    { params }: RouteParams
+    { params }: { params: Promise<{ id: string }> }
 ) {
     const session = await auth()
 
@@ -17,7 +13,7 @@ export async function GET(
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = params
+    const { id } = await params
 
     try {
         const panel = await prisma.panel.findUnique({
@@ -49,7 +45,7 @@ export async function GET(
 // PUT update panel
 export async function PUT(
     request: NextRequest,
-    { params }: RouteParams
+    { params }: { params: Promise<{ id: string }> }
 ) {
     const session = await auth()
 
@@ -57,7 +53,7 @@ export async function PUT(
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = params
+    const { id } = await params
 
     try {
         const { name } = await request.json()
@@ -92,7 +88,7 @@ export async function PUT(
 // DELETE panel
 export async function DELETE(
     request: NextRequest,
-    { params }: RouteParams
+    { params }: { params: Promise<{ id: string }> }
 ) {
     const session = await auth()
 
@@ -100,7 +96,7 @@ export async function DELETE(
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = params
+    const { id } = await params
 
     try {
         const panel = await prisma.panel.findUnique({

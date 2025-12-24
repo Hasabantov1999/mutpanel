@@ -2,14 +2,10 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
-interface RouteParams {
-    params: { id: string }
-}
-
 // POST - Approve or reject a MUT (admin only)
 export async function POST(
     request: NextRequest,
-    { params }: RouteParams
+    { params }: { params: Promise<{ id: string }> }
 ) {
     const session = await auth()
 
@@ -17,7 +13,7 @@ export async function POST(
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = params
+    const { id } = await params
 
     try {
         const { action } = await request.json()

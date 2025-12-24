@@ -2,14 +2,10 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 
-interface RouteParams {
-    params: { id: string }
-}
-
 // GET - Get single MUT
 export async function GET(
     request: NextRequest,
-    { params }: RouteParams
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         const session = await auth()
@@ -17,7 +13,7 @@ export async function GET(
             return NextResponse.json({ error: "Yetkisiz erişim" }, { status: 401 })
         }
 
-        const { id } = params
+        const { id } = await params
 
         const mut = await prisma.mut.findFirst({
             where: { id, userId: session.user.id },
@@ -41,7 +37,7 @@ export async function GET(
 // PUT - Update MUT
 export async function PUT(
     request: NextRequest,
-    { params }: RouteParams
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         const session = await auth()
@@ -49,7 +45,7 @@ export async function PUT(
             return NextResponse.json({ error: "Yetkisiz erişim" }, { status: 401 })
         }
 
-        const { id } = params
+        const { id } = await params
         const body = await request.json()
         const {
             panelYatirim,
@@ -107,7 +103,7 @@ export async function PUT(
 // DELETE - Delete MUT
 export async function DELETE(
     request: NextRequest,
-    { params }: RouteParams
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         const session = await auth()
@@ -115,7 +111,7 @@ export async function DELETE(
             return NextResponse.json({ error: "Yetkisiz erişim" }, { status: 401 })
         }
 
-        const { id } = params
+        const { id } = await params
 
         const existing = await prisma.mut.findFirst({
             where: { id, userId: session.user.id },

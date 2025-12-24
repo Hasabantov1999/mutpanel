@@ -3,14 +3,10 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 
-interface RouteParams {
-    params: { id: string }
-}
-
 // GET single user
 export async function GET(
     request: NextRequest,
-    { params }: RouteParams
+    { params }: { params: Promise<{ id: string }> }
 ) {
     const session = await auth()
 
@@ -18,7 +14,7 @@ export async function GET(
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = params
+    const { id } = await params
 
     try {
         const user = await prisma.user.findUnique({
@@ -53,7 +49,7 @@ export async function GET(
 // PUT update user
 export async function PUT(
     request: NextRequest,
-    { params }: RouteParams
+    { params }: { params: Promise<{ id: string }> }
 ) {
     const session = await auth()
 
@@ -61,7 +57,7 @@ export async function PUT(
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = params
+    const { id } = await params
 
     try {
         const { username, firstName, lastName, email, password, role, panelId } = await request.json()
@@ -129,7 +125,7 @@ export async function PUT(
 // DELETE user
 export async function DELETE(
     request: NextRequest,
-    { params }: RouteParams
+    { params }: { params: Promise<{ id: string }> }
 ) {
     const session = await auth()
 
@@ -137,7 +133,7 @@ export async function DELETE(
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = params
+    const { id } = await params
 
     try {
         const user = await prisma.user.findUnique({ where: { id } })
