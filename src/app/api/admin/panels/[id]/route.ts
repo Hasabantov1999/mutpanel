@@ -2,10 +2,14 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
+interface RouteParams {
+    params: { id: string }
+}
+
 // GET single panel
 export async function GET(
     request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
+    { params }: RouteParams
 ) {
     const session = await auth()
 
@@ -13,7 +17,7 @@ export async function GET(
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
+    const { id } = params
 
     try {
         const panel = await prisma.panel.findUnique({
@@ -45,7 +49,7 @@ export async function GET(
 // PUT update panel
 export async function PUT(
     request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
+    { params }: RouteParams
 ) {
     const session = await auth()
 
@@ -53,7 +57,7 @@ export async function PUT(
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
+    const { id } = params
 
     try {
         const { name } = await request.json()
@@ -62,7 +66,6 @@ export async function PUT(
             return NextResponse.json({ error: "Panel adı gerekli" }, { status: 400 })
         }
 
-        // Check if name is taken by another panel
         const existingPanel = await prisma.panel.findFirst({
             where: {
                 name: name.trim(),
@@ -89,7 +92,7 @@ export async function PUT(
 // DELETE panel
 export async function DELETE(
     request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
+    { params }: RouteParams
 ) {
     const session = await auth()
 
@@ -97,10 +100,9 @@ export async function DELETE(
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
+    const { id } = params
 
     try {
-        // Check if panel has users
         const panel = await prisma.panel.findUnique({
             where: { id },
             include: { _count: { select: { users: true } } }

@@ -2,10 +2,14 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
+interface RouteParams {
+    params: { id: string }
+}
+
 // POST - Approve or reject a MUT (admin only)
 export async function POST(
     request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
+    { params }: RouteParams
 ) {
     const session = await auth()
 
@@ -13,16 +17,15 @@ export async function POST(
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
+    const { id } = params
 
     try {
-        const { action } = await request.json() // "approve" or "reject"
+        const { action } = await request.json()
 
         if (!["approve", "reject"].includes(action)) {
             return NextResponse.json({ error: "Geçersiz işlem" }, { status: 400 })
         }
 
-        // Get the MUT with user info
         const mut = await prisma.mut.findUnique({
             where: { id },
             include: { user: true }
@@ -38,7 +41,6 @@ export async function POST(
 
         const newStatus = action === "approve" ? "APPROVED" : "REJECTED"
 
-        // Update MUT status
         const updatedMut = await prisma.mut.update({
             where: { id },
             data: {
@@ -48,7 +50,6 @@ export async function POST(
             }
         })
 
-        // Create notification for the MUT owner
         const adminName = session.user.name || "Admin"
         const notificationMessage = action === "approve"
             ? `${adminName} MUT kaydınızı onayladı.`

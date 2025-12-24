@@ -3,10 +3,14 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 
+interface RouteParams {
+    params: { id: string }
+}
+
 // GET single user
 export async function GET(
     request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
+    { params }: RouteParams
 ) {
     const session = await auth()
 
@@ -14,7 +18,7 @@ export async function GET(
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
+    const { id } = params
 
     try {
         const user = await prisma.user.findUnique({
@@ -49,7 +53,7 @@ export async function GET(
 // PUT update user
 export async function PUT(
     request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
+    { params }: RouteParams
 ) {
     const session = await auth()
 
@@ -57,23 +61,20 @@ export async function PUT(
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
+    const { id } = params
 
     try {
         const { username, firstName, lastName, email, password, role, panelId } = await request.json()
 
-        // Check if user exists
         const existingUser = await prisma.user.findUnique({ where: { id } })
         if (!existingUser) {
             return NextResponse.json({ error: "Kullanıcı bulunamadı" }, { status: 404 })
         }
 
-        // Prevent modifying default admin
         if (existingUser.username === "admin" && (username !== "admin" || role !== "ADMIN")) {
             return NextResponse.json({ error: "Default admin hesabı değiştirilemez" }, { status: 400 })
         }
 
-        // Check if username is taken by another user
         if (username && username !== existingUser.username) {
             const userWithUsername = await prisma.user.findUnique({ where: { username } })
             if (userWithUsername) {
@@ -81,7 +82,6 @@ export async function PUT(
             }
         }
 
-        // Check if email is taken by another user
         if (email && email !== existingUser.email) {
             const userWithEmail = await prisma.user.findUnique({ where: { email } })
             if (userWithEmail) {
@@ -89,7 +89,6 @@ export async function PUT(
             }
         }
 
-        // Build update data
         const updateData: Record<string, unknown> = {}
         if (username) updateData.username = username
         if (firstName) updateData.firstName = firstName
@@ -98,7 +97,6 @@ export async function PUT(
         if (role) updateData.role = role
         if (password) updateData.password = await bcrypt.hash(password, 10)
 
-        // Handle panel assignment
         if (role === "ADMIN") {
             updateData.panelId = null
         } else if (panelId !== undefined) {
@@ -131,7 +129,7 @@ export async function PUT(
 // DELETE user
 export async function DELETE(
     request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
+    { params }: RouteParams
 ) {
     const session = await auth()
 
@@ -139,7 +137,7 @@ export async function DELETE(
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
+    const { id } = params
 
     try {
         const user = await prisma.user.findUnique({ where: { id } })
@@ -148,12 +146,10 @@ export async function DELETE(
             return NextResponse.json({ error: "Kullanıcı bulunamadı" }, { status: 404 })
         }
 
-        // Prevent deleting default admin
         if (user.username === "admin") {
             return NextResponse.json({ error: "Default admin hesabı silinemez" }, { status: 400 })
         }
 
-        // Prevent self-deletion
         if (user.id === session.user.id) {
             return NextResponse.json({ error: "Kendi hesabınızı silemezsiniz" }, { status: 400 })
         }

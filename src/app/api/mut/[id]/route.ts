@@ -2,10 +2,14 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 
+interface RouteParams {
+    params: { id: string }
+}
+
 // GET - Get single MUT
 export async function GET(
     request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
+    { params }: RouteParams
 ) {
     try {
         const session = await auth()
@@ -13,7 +17,7 @@ export async function GET(
             return NextResponse.json({ error: "Yetkisiz erişim" }, { status: 401 })
         }
 
-        const { id } = await params
+        const { id } = params
 
         const mut = await prisma.mut.findFirst({
             where: { id, userId: session.user.id },
@@ -37,7 +41,7 @@ export async function GET(
 // PUT - Update MUT
 export async function PUT(
     request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
+    { params }: RouteParams
 ) {
     try {
         const session = await auth()
@@ -45,7 +49,7 @@ export async function PUT(
             return NextResponse.json({ error: "Yetkisiz erişim" }, { status: 401 })
         }
 
-        const { id } = await params
+        const { id } = params
         const body = await request.json()
         const {
             panelYatirim,
@@ -56,7 +60,6 @@ export async function PUT(
             manuelCekimler,
         } = body
 
-        // Check ownership
         const existing = await prisma.mut.findFirst({
             where: { id, userId: session.user.id },
         })
@@ -65,11 +68,9 @@ export async function PUT(
             return NextResponse.json({ error: "Kayıt bulunamadı" }, { status: 404 })
         }
 
-        // Delete existing manual entries
         await prisma.manuelYatirim.deleteMany({ where: { mutId: id } })
         await prisma.manuelCekim.deleteMany({ where: { mutId: id } })
 
-        // Update MUT with new data
         const mut = await prisma.mut.update({
             where: { id },
             data: {
@@ -106,7 +107,7 @@ export async function PUT(
 // DELETE - Delete MUT
 export async function DELETE(
     request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
+    { params }: RouteParams
 ) {
     try {
         const session = await auth()
@@ -114,9 +115,8 @@ export async function DELETE(
             return NextResponse.json({ error: "Yetkisiz erişim" }, { status: 401 })
         }
 
-        const { id } = await params
+        const { id } = params
 
-        // Check ownership
         const existing = await prisma.mut.findFirst({
             where: { id, userId: session.user.id },
         })
