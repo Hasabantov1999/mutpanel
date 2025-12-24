@@ -7,19 +7,15 @@ import "@/styles/dashboard.css"
 
 interface DashboardWrapperProps {
     children: React.ReactNode
-    user?: {
-        name?: string | null
-        email?: string | null
-    }
 }
 
-export default function DashboardWrapper({ children, user }: DashboardWrapperProps) {
+export default function DashboardWrapper({ children }: DashboardWrapperProps) {
     return (
         <ThemeProvider>
             <div className="app-wrapper">
                 <Sidebar />
                 <div className="main-wrapper">
-                    <Header user={user} />
+                    <Header />
                     <main className="main-content">
                         {children}
                     </main>

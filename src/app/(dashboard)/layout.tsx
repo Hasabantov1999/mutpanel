@@ -16,7 +16,7 @@ export default async function DashboardLayout({
 
     return (
         <SessionProvider session={session}>
-            <DashboardWrapper user={session.user}>
+            <DashboardWrapper>
                 {children}
             </DashboardWrapper>
         </SessionProvider>
