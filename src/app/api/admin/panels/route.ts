@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
-// GET all panels (admin only)
+// GET all panels (superadmin/admin only)
 export async function GET() {
     const session = await auth()
 
-    if (!session?.user || session.user.role !== "ADMIN") {
+    if (!session?.user || !["SUPERADMIN", "ADMIN", "MANAGER"].includes(session.user.role)) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -26,11 +26,11 @@ export async function GET() {
     }
 }
 
-// POST create new panel (admin only)
+// POST create new panel (superadmin/admin only)
 export async function POST(request: NextRequest) {
     const session = await auth()
 
-    if (!session?.user || session.user.role !== "ADMIN") {
+    if (!session?.user || !["SUPERADMIN", "ADMIN"].includes(session.user.role)) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 

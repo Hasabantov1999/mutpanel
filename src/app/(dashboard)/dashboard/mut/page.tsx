@@ -3,23 +3,40 @@
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import ConfirmModal from "@/components/ConfirmModal"
+import MutViewModal from "@/components/MutViewModal"
+import { calculateMutFinances } from "@/lib/calculations"
 
 interface ManuelEntry {
     id: string
     isim: string
     miktar: number
+    komisyonOrani?: number | null
 }
 
 interface Mut {
     id: string
+    isim?: string | null
     panelYatirim: number
     panelCekim: number
     devir: number
     komisyonOrani: number
+    araciKomisyonOrani?: number | null
     status: string
     createdAt: string
+    userId: string
     manuelYatirimlar: ManuelEntry[]
     manuelCekimler: ManuelEntry[]
+    teslimatlar: ManuelEntry[]
+    user: {
+        id?: string
+        firstName: string
+        lastName: string
+        username: string
+        groupName?: string | null
+        panelId?: string | null
+        createdById?: string | null
+        panel?: { name: string } | null
+    }
 }
 
 export default function MutListPage() {
@@ -28,10 +45,18 @@ export default function MutListPage() {
     const [deleteId, setDeleteId] = useState<string | null>(null)
     const [showDeleteModal, setShowDeleteModal] = useState(false)
     const [selectedMutId, setSelectedMutId] = useState<string | null>(null)
+    const [showViewModal, setShowViewModal] = useState(false)
+    const [viewMut, setViewMut] = useState<Mut | null>(null)
+    const [search, setSearch] = useState("")
 
-    const fetchMuts = async () => {
+    const fetchMuts = async (searchTerm = "") => {
         try {
-            const response = await fetch("/api/mut")
+            setLoading(true)
+            const url = new URL("/api/mut", window.location.origin)
+            if (searchTerm) {
+                url.searchParams.append("search", searchTerm)
+            }
+            const response = await fetch(url.toString())
             const data = await response.json()
             setMuts(data)
         } catch (error) {
@@ -44,6 +69,11 @@ export default function MutListPage() {
     useEffect(() => {
         fetchMuts()
     }, [])
+
+    const handleSearch = (e: React.FormEvent) => {
+        e.preventDefault()
+        fetchMuts(search)
+    }
 
     const openDeleteModal = (id: string) => {
         setSelectedMutId(id)
@@ -75,14 +105,20 @@ export default function MutListPage() {
     }
 
     const calculateTotals = (mut: Mut) => {
-        const manuelYatirimTotal = mut.manuelYatirimlar.reduce((sum, m) => sum + m.miktar, 0)
-        const manuelCekimTotal = mut.manuelCekimler.reduce((sum, m) => sum + m.miktar, 0)
-        const toplamYatirim = mut.panelYatirim + manuelYatirimTotal
-        const toplamCekim = mut.panelCekim + manuelCekimTotal
-        const kasa = toplamYatirim - toplamCekim + mut.devir
-        const komisyon = toplamYatirim * (mut.komisyonOrani / 100)
+        const finances = calculateMutFinances({
+            panelYatirim: mut.panelYatirim,
+            panelCekim: mut.panelCekim,
+            devir: mut.devir,
+            komisyonOrani: mut.komisyonOrani,
+            araciKomisyonOrani: mut.araciKomisyonOrani,
+            manuelYatirimlar: mut.manuelYatirimlar,
+            manuelCekimler: mut.manuelCekimler,
+            teslimatlar: mut.teslimatlar || []
+        })
 
-        return { manuelYatirimTotal, manuelCekimTotal, toplamYatirim, toplamCekim, kasa, komisyon }
+        return {
+            ...finances
+        }
     }
 
     const getStatusBadge = (status: string) => {
@@ -98,22 +134,38 @@ export default function MutListPage() {
         }
     }
 
-    if (loading) {
-        return (
-            <div className="loading-spinner">
-                <div className="spinner"></div>
-            </div>
-        )
-    }
-
     return (
         <div className="mut-list-page">
             {/* Page Header */}
             <div className="page-header">
                 <h1 className="page-title">MUT Kayıtları</h1>
-                <Link href="/dashboard/mut/create" className="btn btn-primary">
-                    + Yeni Kayıt
-                </Link>
+                <div className="header-actions">
+                    <form onSubmit={handleSearch} className="search-form" style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                        <input
+                            type="text"
+                            placeholder="İsim, Kullanıcı veya Grup ara..."
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            // Using inline styles to force the look requested
+                            style={{
+                                padding: "10px 16px",
+                                borderRadius: "20px",
+                                border: "1px solid #e2e8f0",
+                                fontSize: "14px",
+                                width: "260px",
+                                outline: "none",
+                                transition: "all 0.2s",
+                                backgroundColor: "white"
+                            }}
+                            onFocus={(e) => e.target.style.borderColor = "#3454d1"}
+                            onBlur={(e) => e.target.style.borderColor = "#e2e8f0"}
+                        />
+                        <button type="submit" className="btn btn-secondary" style={{ borderRadius: "20px", padding: "8px 20px" }}>Ara</button>
+                    </form>
+                    <Link href="/dashboard/mut/create" className="btn btn-primary">
+                        + Yeni Kayıt
+                    </Link>
+                </div>
             </div>
 
             {/* Table */}
@@ -122,17 +174,28 @@ export default function MutListPage() {
                     <thead>
                         <tr>
                             <th>Tarih</th>
+                            <th>İsim / Kullanıcı</th>
+                            <th>Grup</th>
                             <th>Panel Yatırım</th>
                             <th>Panel Çekim</th>
-                            <th>Manuel Yatırım</th>
-                            <th>Manuel Çekim</th>
-                            <th>Kasa</th>
+                            <th>Eklenecek</th>
+                            <th>Düşülecek</th>
+                            <th>GENEL KASA</th>
                             <th>Durum</th>
                             <th>İşlemler</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {muts.length > 0 ? (
+                        {loading ? (
+                            <tr>
+                                <td colSpan={10}>
+                                    <div className="loading-state">
+                                        <div className="spinner"></div>
+                                        <p>Yükleniyor...</p>
+                                    </div>
+                                </td>
+                            </tr>
+                        ) : muts.length > 0 ? (
                             muts.map((mut) => {
                                 const totals = calculateTotals(mut)
                                 return (
@@ -143,6 +206,15 @@ export default function MutListPage() {
                                                 month: "short",
                                                 year: "numeric",
                                             })}
+                                        </td>
+                                        <td>
+                                            <div className="mut-name-cell">
+                                                <span className="mut-isim">{mut.isim || "İsimsiz Kayıt"}</span>
+                                                <small className="mut-user">{mut.user.firstName} {mut.user.lastName}</small>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <span className="badge badge-outline">{mut.user.groupName || "-"}</span>
                                         </td>
                                         <td>
                                             <span className="badge badge-success">
@@ -168,6 +240,16 @@ export default function MutListPage() {
                                         <td>{getStatusBadge(mut.status)}</td>
                                         <td>
                                             <div className="table-actions">
+                                                <button
+                                                    className="action-btn view"
+                                                    title="Görüntüle"
+                                                    onClick={() => {
+                                                        setViewMut(mut)
+                                                        setShowViewModal(true)
+                                                    }}
+                                                >
+                                                    👁️
+                                                </button>
                                                 <Link
                                                     href={`/dashboard/mut/${mut.id}/edit`}
                                                     className="action-btn edit"
@@ -190,15 +272,15 @@ export default function MutListPage() {
                             })
                         ) : (
                             <tr>
-                                <td colSpan={8}>
+                                <td colSpan={10}>
                                     <div className="empty-state">
                                         <div className="empty-state-icon">📋</div>
-                                        <p className="empty-state-title">Henüz kayıt yok</p>
+                                        <p className="empty-state-title">Kayıt bulunamadı</p>
                                         <p className="empty-state-desc">
-                                            İlk MUT kaydınızı oluşturmak için butona tıklayın.
+                                            Arama kriterlerinize uygun kayıt bulunamadı veya henüz kayıt yok.
                                         </p>
                                         <Link href="/dashboard/mut/create" className="btn btn-primary">
-                                            + İlk Kaydı Oluştur
+                                            + Yeni Kayıt Oluştur
                                         </Link>
                                     </div>
                                 </td>
@@ -217,6 +299,16 @@ export default function MutListPage() {
                 type="danger"
                 onConfirm={handleDelete}
                 onCancel={() => setShowDeleteModal(false)}
+            />
+
+            <MutViewModal
+                mut={viewMut}
+                isOpen={showViewModal}
+                onClose={() => {
+                    setShowViewModal(false)
+                    setViewMut(null)
+                }}
+                onSuccess={() => fetchMuts(search)}
             />
         </div>
     )

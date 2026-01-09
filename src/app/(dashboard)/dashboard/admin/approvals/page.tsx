@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import ConfirmModal from "@/components/ConfirmModal"
+import { calculateMutFinances } from "@/lib/calculations"
 
 interface User {
     firstName: string
@@ -14,14 +15,17 @@ interface ManuelEntry {
     id: string
     isim: string
     miktar: number
+    komisyonOrani?: number | null
 }
 
 interface Mut {
     id: string
+    isim?: string | null
     panelYatirim: number
     panelCekim: number
     devir: number
     komisyonOrani: number
+    araciKomisyonOrani?: number | null
     status: string
     createdAt: string
     approvedAt: string | null
@@ -29,6 +33,7 @@ interface Mut {
     approvedBy: { firstName: string; lastName: string } | null
     manuelYatirimlar: ManuelEntry[]
     manuelCekimler: ManuelEntry[]
+    teslimatlar: ManuelEntry[]
 }
 
 export default function AdminApprovalsPage() {
@@ -105,12 +110,20 @@ export default function AdminApprovalsPage() {
     }
 
     const calculateTotals = (mut: Mut) => {
-        const manuelYatirimTotal = mut.manuelYatirimlar.reduce((sum, m) => sum + m.miktar, 0)
-        const manuelCekimTotal = mut.manuelCekimler.reduce((sum, m) => sum + m.miktar, 0)
-        const toplamYatirim = mut.panelYatirim + manuelYatirimTotal
-        const toplamCekim = mut.panelCekim + manuelCekimTotal
-        const kasa = toplamYatirim - toplamCekim + mut.devir
-        return { kasa }
+        const finances = calculateMutFinances({
+            panelYatirim: mut.panelYatirim,
+            panelCekim: mut.panelCekim,
+            devir: mut.devir,
+            komisyonOrani: mut.komisyonOrani,
+            araciKomisyonOrani: mut.araciKomisyonOrani,
+            manuelYatirimlar: mut.manuelYatirimlar,
+            manuelCekimler: mut.manuelCekimler,
+            teslimatlar: mut.teslimatlar || []
+        })
+
+        return {
+            ...finances
+        }
     }
 
     const getStatusBadge = (status: string) => {
@@ -175,7 +188,7 @@ export default function AdminApprovalsPage() {
                     <tbody>
                         {muts.length > 0 ? (
                             muts.map((mut) => {
-                                const { kasa } = calculateTotals(mut)
+                                const totals = calculateTotals(mut)
                                 return (
                                     <tr key={mut.id}>
                                         <td>
@@ -196,8 +209,8 @@ export default function AdminApprovalsPage() {
                                             })}
                                         </td>
                                         <td>
-                                            <strong style={{ color: kasa >= 0 ? "var(--success)" : "var(--danger)" }}>
-                                                {formatCurrency(kasa)}
+                                            <strong style={{ color: totals.kasa >= 0 ? "var(--success)" : "var(--danger)" }}>
+                                                {formatCurrency(totals.kasa)}
                                             </strong>
                                         </td>
                                         <td>

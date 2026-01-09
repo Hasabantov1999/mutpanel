@@ -6,10 +6,13 @@ interface StatsCardsProps {
         toplamCekim: number
         devir: number
         komisyon: number
+        araciKomisyon: number
+        kasa: number
     }
+    userRole?: string
 }
 
-export default function StatsCards({ stats }: StatsCardsProps) {
+export default function StatsCards({ stats, userRole }: StatsCardsProps) {
     const formatCurrency = (value: number) => {
         return new Intl.NumberFormat("tr-TR", {
             style: "currency",
@@ -20,48 +23,48 @@ export default function StatsCards({ stats }: StatsCardsProps) {
 
     const cards = [
         {
+            label: "GENEL KASA",
+            value: stats.kasa,
+            icon: "📊",
+            color: "blue",
+            show: true
+        },
+        {
             label: "Toplam Yatırım",
             value: stats.toplamYatirim,
             icon: "💰",
             color: "green",
-            trend: "+12.5%",
-            trendUp: true,
+            show: true
         },
         {
             label: "Toplam Çekim",
             value: stats.toplamCekim,
             icon: "💸",
             color: "red",
-            trend: "-8.2%",
-            trendUp: false,
-        },
-        {
-            label: "Kasa (Devir)",
-            value: stats.devir,
-            icon: "📊",
-            color: "blue",
-            trend: "+5.1%",
-            trendUp: true,
+            show: true
         },
         {
             label: "Komisyon Kazanç",
             value: stats.komisyon,
             icon: "🏆",
             color: "yellow",
-            trend: "+15.3%",
-            trendUp: true,
+            show: true
+        },
+        {
+            label: "Aracı Komisyon",
+            value: stats.araciKomisyon,
+            icon: "🤝",
+            color: "purple",
+            show: userRole === "SUPERADMIN" || userRole === "ADMIN"
         },
     ]
 
     return (
-        <div className="stats-grid">
-            {cards.map((card, index) => (
+        <div className="stats-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
+            {cards.filter(c => c.show).map((card, index) => (
                 <div key={index} className="stat-card">
                     <div className="stat-card-header">
                         <div className={`stat-icon ${card.color}`}>{card.icon}</div>
-                        <span className={`stat-trend ${card.trendUp ? "up" : "down"}`}>
-                            {card.trend}
-                        </span>
                     </div>
                     <div className="stat-value">{formatCurrency(card.value)}</div>
                     <div className="stat-label">{card.label}</div>

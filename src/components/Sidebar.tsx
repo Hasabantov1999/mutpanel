@@ -17,17 +17,7 @@ const userMenuItems = [
     },
 ]
 
-const adminMenuItems = [
-    {
-        title: "Dashboard",
-        icon: "📊",
-        href: "/dashboard",
-    },
-    {
-        title: "MUT Kayıtları",
-        icon: "💰",
-        href: "/dashboard/mut",
-    },
+const managementMenuItems = [
     {
         section: "Yönetim",
     },
@@ -35,16 +25,19 @@ const adminMenuItems = [
         title: "Kullanıcılar",
         icon: "👥",
         href: "/dashboard/admin/users",
+        roles: ["SUPERADMIN", "ADMIN", "MANAGER"]
     },
     {
         title: "Paneller",
         icon: "📁",
         href: "/dashboard/admin/panels",
+        roles: ["SUPERADMIN"]
     },
     {
         title: "MUT Onayları",
         icon: "✅",
         href: "/dashboard/admin/approvals",
+        roles: ["SUPERADMIN", "ADMIN", "MANAGER"]
     },
 ]
 
@@ -52,8 +45,22 @@ export default function Sidebar() {
     const pathname = usePathname()
     const { data: session } = useSession()
 
-    const isAdmin = session?.user?.role === "ADMIN"
-    const menuItems = isAdmin ? adminMenuItems : userMenuItems
+    const role = session?.user?.role || "USER"
+
+    const menuItems = [
+        ...userMenuItems,
+        ...managementMenuItems.filter(item => {
+            if ('section' in item) return true
+            return item.roles?.includes(role)
+        })
+    ].filter((item, index, array) => {
+        // Eğer bir section'dan sonra hiç yetkili menü kalmadıysa section'ı da gizle
+        if ('section' in item) {
+            const nextItems = array.slice(index + 1)
+            return nextItems.some(next => !('section' in next))
+        }
+        return true
+    })
 
     return (
         <aside className="sidebar">
@@ -69,10 +76,13 @@ export default function Sidebar() {
                         <rect width="50" height="50" rx="12" fill="url(#sidebarLogoGrad)" />
                         <text x="25" y="33" textAnchor="middle" fill="white" fontSize="18" fontWeight="bold">M</text>
                     </svg>
-                    <span className="sidebar-brand">MUT Panel</span>
                 </div>
-                {isAdmin && (
-                    <span className="sidebar-role-badge">Admin</span>
+                {session?.user?.role && (
+                    <span className="sidebar-role-badge">
+                        {session.user.role === "SUPERADMIN" ? "SuperAdmin" :
+                            session.user.role === "ADMIN" ? "Admin" :
+                                session.user.role === "MANAGER" ? "Manager" : "Group Holder"}
+                    </span>
                 )}
             </div>
 
@@ -107,11 +117,15 @@ export default function Sidebar() {
 
             <div className="sidebar-footer">
                 <div className="sidebar-user-info">
-                    {session?.user?.panelName && (
+                    {session?.user?.role === "SUPERADMIN" ? (
+                        <span className="sidebar-panel-name">
+                            🌐 Genel Yönetim
+                        </span>
+                    ) : session?.user?.panelName ? (
                         <span className="sidebar-panel-name">
                             📁 {session.user.panelName}
                         </span>
-                    )}
+                    ) : null}
                 </div>
                 <div className="sidebar-version">v2.0.0</div>
             </div>

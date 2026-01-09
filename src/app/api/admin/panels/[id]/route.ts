@@ -9,7 +9,8 @@ export async function GET(
 ) {
     const session = await auth()
 
-    if (!session?.user || session.user.role !== "ADMIN") {
+    const isAuthorized = session?.user && ["SUPERADMIN", "ADMIN"].includes(session.user.role)
+    if (!isAuthorized) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -49,7 +50,8 @@ export async function PUT(
 ) {
     const session = await auth()
 
-    if (!session?.user || session.user.role !== "ADMIN") {
+    const isAuthorized = session?.user && ["SUPERADMIN", "ADMIN"].includes(session.user.role)
+    if (!isAuthorized) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -92,7 +94,8 @@ export async function DELETE(
 ) {
     const session = await auth()
 
-    if (!session?.user || session.user.role !== "ADMIN") {
+    const isAuthorized = session?.user && ["SUPERADMIN", "ADMIN"].includes(session.user.role)
+    if (!isAuthorized) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 

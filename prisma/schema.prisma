@@ -25,7 +25,8 @@ model User {
   lastName      String
   email         String    @unique
   password      String
-  role          String    @default("USER") // ADMIN or USER
+  role          String    @default("USER") // SUPERADMIN, ADMIN, MANAGER, USER
+  groupName     String?   // B1, B2 vb.
   panelId       String?
   panel         Panel?    @relation(fields: [panelId], references: [id])
   createdById   String?
@@ -40,10 +41,12 @@ model User {
 
 model Mut {
   id               String    @id @default(cuid())
+  isim             String?   // MUT kaydı ismi (arama/filtreleme için)
   panelYatirim     Float     @default(0)
   panelCekim       Float     @default(0)
   devir            Float     @default(0)
   komisyonOrani    Float     @default(1.25)
+  araciKomisyonOrani Float?  // Opsiyonel, yüzde olarak
   status           String    @default("PENDING") // PENDING, APPROVED, REJECTED
   approvedById     String?
   approvedBy       User?     @relation("ApprovedMuts", fields: [approvedById], references: [id])
@@ -54,6 +57,7 @@ model Mut {
   user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   manuelYatirimlar ManuelYatirim[]
   manuelCekimler   ManuelCekim[]
+  teslimatlar      Teslimat[]
 }
 
 model ManuelYatirim {
@@ -70,6 +74,15 @@ model ManuelCekim {
   miktar    Float
   mutId     String
   mut       Mut      @relation(fields: [mutId], references: [id], onDelete: Cascade)
+}
+
+model Teslimat {
+  id            String   @id @default(cuid())
+  isim          String
+  miktar        Float
+  komisyonOrani Float?   // Yüzde olarak (örn: 1.5)
+  mutId         String
+  mut           Mut      @relation(fields: [mutId], references: [id], onDelete: Cascade)
 }
 
 model Notification {

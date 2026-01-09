@@ -162,7 +162,7 @@ export default function Header() {
                             }}
                         >
                             <div className="avatar-sm">
-                                {session?.user?.name?.charAt(0).toUpperCase() || "U"}
+                                {session?.user?.name ? session.user.name.charAt(0).toUpperCase() : "U"}
                             </div>
                             <span className="profile-name">{session?.user?.name || "Kullanıcı"}</span>
                             <span className="dropdown-arrow">▼</span>
@@ -172,7 +172,7 @@ export default function Header() {
                             <div className="dropdown-menu profile-menu">
                                 <div className="dropdown-header profile-header">
                                     <div className="avatar-md">
-                                        {session?.user?.name?.charAt(0).toUpperCase() || "U"}
+                                        {session?.user?.name ? session.user.name.charAt(0).toUpperCase() : "U"}
                                     </div>
                                     <div className="profile-info">
                                         <h4>{session?.user?.name || "Kullanıcı"}</h4>

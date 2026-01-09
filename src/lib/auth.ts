@@ -8,6 +8,7 @@ declare module "next-auth" {
         role?: string
         panelId?: string | null
         panelName?: string | null
+        groupName?: string | null
     }
     interface Session {
         user: {
@@ -17,6 +18,7 @@ declare module "next-auth" {
             role: string
             panelId?: string | null
             panelName?: string | null
+            groupName?: string | null
         }
     }
 }
@@ -27,6 +29,7 @@ declare module "@auth/core/jwt" {
         role: string
         panelId?: string | null
         panelName?: string | null
+        groupName?: string | null
     }
 }
 
@@ -73,6 +76,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                         role: user.role,
                         panelId: user.panelId,
                         panelName: user.panel?.name || null,
+                        groupName: user.groupName || null,
                     }
                 } catch (error) {
                     console.error('[Auth] Authorization error:', error)
@@ -91,6 +95,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 token.role = user.role as string
                 token.panelId = user.panelId
                 token.panelName = user.panelName
+                token.groupName = user.groupName
             }
             return token
         },
@@ -100,6 +105,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 session.user.role = token.role
                 session.user.panelId = token.panelId
                 session.user.panelName = token.panelName
+                session.user.groupName = token.groupName
             }
             return session
         }

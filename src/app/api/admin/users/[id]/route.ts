@@ -10,7 +10,7 @@ export async function GET(
 ) {
     const session = await auth()
 
-    if (!session?.user || session.user.role !== "ADMIN") {
+    if (!session?.user || !["SUPERADMIN", "ADMIN", "MANAGER"].includes(session.user.role)) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -26,17 +26,29 @@ export async function GET(
                 lastName: true,
                 email: true,
                 role: true,
+                groupName: true,
                 panelId: true,
-                panel: { select: { name: true } },
+                panel: { select: { name: true, id: true } },
                 createdById: true,
-                createdBy: { select: { firstName: true, lastName: true } },
+                createdBy: { select: { firstName: true, lastName: true, role: true } },
                 createdAt: true,
                 _count: { select: { muts: true } }
-            }
+            } as any
         })
 
         if (!user) {
             return NextResponse.json({ error: "Kullanıcı bulunamadı" }, { status: 404 })
+        }
+
+        // Yetki Kontrolü
+        if (session.user.role === "ADMIN") {
+            if ((user as any).panelId !== session.user.panelId) {
+                return NextResponse.json({ error: "Bu kullanıcıyı görme yetkiniz yok" }, { status: 403 })
+            }
+        } else if (session.user.role === "MANAGER") {
+            if ((user as any).createdById !== session.user.id && (user as any).id !== session.user.id) {
+                return NextResponse.json({ error: "Bu kullanıcıyı görme yetkiniz yok" }, { status: 403 })
+            }
         }
 
         return NextResponse.json(user)
@@ -53,22 +65,45 @@ export async function PUT(
 ) {
     const session = await auth()
 
-    if (!session?.user || session.user.role !== "ADMIN") {
+    if (!session?.user || !["SUPERADMIN", "ADMIN", "MANAGER"].includes(session.user.role)) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const { id } = await params
 
     try {
-        const { username, firstName, lastName, email, password, role, panelId } = await request.json()
+        const { username, firstName, lastName, email, password, role, panelId, groupName } = await request.json()
 
         const existingUser = await prisma.user.findUnique({ where: { id } })
         if (!existingUser) {
             return NextResponse.json({ error: "Kullanıcı bulunamadı" }, { status: 404 })
         }
 
-        if (existingUser.username === "admin" && (username !== "admin" || role !== "ADMIN")) {
-            return NextResponse.json({ error: "Default admin hesabı değiştirilemez" }, { status: 400 })
+        // Yetki Kontrolü
+        if (session.user.role === "ADMIN") {
+            if (existingUser.panelId !== session.user.panelId) {
+                return NextResponse.json({ error: "Bu kullanıcıyı düzenleme yetkiniz yok" }, { status: 403 })
+            }
+            if (role && (role === "SUPERADMIN" || role === "ADMIN")) {
+                return NextResponse.json({ error: "Bu role yükseltme yetkiniz yok" }, { status: 403 })
+            }
+        } else if (session.user.role === "MANAGER") {
+            if (existingUser.createdById !== session.user.id && existingUser.id !== session.user.id) {
+                return NextResponse.json({ error: "Bu kullanıcıyı düzenleme yetkiniz yok" }, { status: 403 })
+            }
+            if (role && role !== "USER" && existingUser.id !== session.user.id) {
+                return NextResponse.json({ error: "Sadece Group Holder (USER) rolü verebilirsiniz" }, { status: 403 })
+            }
+        }
+
+        // Group Holder için groupName zorunluluğu (eğer rol USER ise veya USER'a çekiliyorsa)
+        const targetRole = role || (existingUser as any).role
+        if (targetRole === "USER" && groupName !== undefined && (!groupName || groupName.trim() === "")) {
+            return NextResponse.json({ error: "Group Holder için grup açıklaması (örn: B1 Destek) zorunludur" }, { status: 400 })
+        }
+
+        if (existingUser.username === "hekimfinance" && (username !== "hekimfinance" || (role && role !== "SUPERADMIN"))) {
+            return NextResponse.json({ error: "SuperAdmin hesabı değiştirilemez" }, { status: 400 })
         }
 
         if (username && username !== existingUser.username) {
@@ -85,18 +120,20 @@ export async function PUT(
             }
         }
 
-        const updateData: Record<string, unknown> = {}
+        const updateData: any = {}
         if (username) updateData.username = username
         if (firstName) updateData.firstName = firstName
         if (lastName) updateData.lastName = lastName
         if (email) updateData.email = email
         if (role) updateData.role = role
+        if (groupName !== undefined) updateData.groupName = groupName
         if (password) updateData.password = await bcrypt.hash(password, 10)
 
-        if (role === "ADMIN") {
-            updateData.panelId = null
-        } else if (panelId !== undefined) {
-            updateData.panelId = panelId
+        if (panelId !== undefined) {
+            // Sadece SuperAdmin panel değiştirebilir, Admin/Manager kendi panelinde kalır
+            if (session.user.role === "SUPERADMIN") {
+                updateData.panelId = panelId
+            }
         }
 
         const user = await prisma.user.update({
@@ -109,10 +146,11 @@ export async function PUT(
                 lastName: true,
                 email: true,
                 role: true,
+                groupName: true,
                 panelId: true,
                 panel: { select: { name: true } },
                 createdAt: true
-            }
+            } as any
         })
 
         return NextResponse.json(user)
@@ -129,7 +167,7 @@ export async function DELETE(
 ) {
     const session = await auth()
 
-    if (!session?.user || session.user.role !== "ADMIN") {
+    if (!session?.user || !["SUPERADMIN", "ADMIN", "MANAGER"].includes(session.user.role)) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -142,11 +180,22 @@ export async function DELETE(
             return NextResponse.json({ error: "Kullanıcı bulunamadı" }, { status: 404 })
         }
 
-        if (user.username === "admin") {
-            return NextResponse.json({ error: "Default admin hesabı silinemez" }, { status: 400 })
+        // Yetki Kontrolü
+        if (session.user.role === "ADMIN") {
+            if ((user as any).panelId !== session.user.panelId || (user as any).role === "ADMIN" || (user as any).role === "SUPERADMIN") {
+                return NextResponse.json({ error: "Bu kullanıcıyı silme yetkiniz yok" }, { status: 403 })
+            }
+        } else if (session.user.role === "MANAGER") {
+            if ((user as any).createdById !== session.user.id) {
+                return NextResponse.json({ error: "Bu kullanıcıyı silme yetkiniz yok" }, { status: 403 })
+            }
         }
 
-        if (user.id === session.user.id) {
+        if ((user as any).username === "hekimfinance") {
+            return NextResponse.json({ error: "SuperAdmin hesabı silinemez" }, { status: 400 })
+        }
+
+        if ((user as any).id === session.user.id) {
             return NextResponse.json({ error: "Kendi hesabınızı silemezsiniz" }, { status: 400 })
         }
 

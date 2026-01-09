@@ -7,12 +7,40 @@ const prisma = new PrismaClient({
 
 async function main() {
     console.log('🌱 Starting database seed...')
-    
+
     try {
         // Test database connection
         await prisma.$connect()
         console.log('✅ Database connection successful')
-        
+
+        // Check if superadmin already exists
+        const existingSuperAdmin = await prisma.user.findUnique({
+            where: { username: 'hekimfinance' }
+        })
+
+        if (!existingSuperAdmin) {
+            console.log('👤 Creating superadmin user...')
+            const hashedPassword = await bcrypt.hash('Hh112233..', 10)
+
+            const superadmin = await prisma.user.create({
+                data: {
+                    username: 'hekimfinance',
+                    firstName: 'Hekim',
+                    lastName: 'Finance',
+                    email: 'hekim@finance.com',
+                    password: hashedPassword,
+                    role: 'SUPERADMIN',
+                }
+            })
+
+            console.log('✅ Superadmin user created successfully')
+            console.log('   Username: hekimfinance')
+            console.log('   Password: [REDACTED]')
+            console.log('   ID:', superadmin.id)
+        } else {
+            console.log('ℹ️  Superadmin user already exists')
+        }
+
         // Check if admin already exists
         const existingAdmin = await prisma.user.findUnique({
             where: { username: 'admin' }
@@ -39,21 +67,19 @@ async function main() {
             console.log('   ID:', admin.id)
         } else {
             console.log('ℹ️  Admin user already exists')
-            console.log('   Username:', existingAdmin.username)
-            console.log('   ID:', existingAdmin.id)
         }
-        
+
         // Verify the user can be found
         const verifyAdmin = await prisma.user.findUnique({
             where: { username: 'admin' }
         })
-        
+
         if (verifyAdmin) {
             console.log('✅ Admin user verified in database')
         } else {
             throw new Error('Admin user not found after creation')
         }
-        
+
     } catch (error) {
         console.error('❌ Error during seeding:', error)
         throw error

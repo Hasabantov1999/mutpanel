@@ -2,14 +2,14 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
-// POST - Approve or reject a MUT (admin only)
+// POST - Approve or reject a MUT (admin/manager only)
 export async function POST(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
     const session = await auth()
 
-    if (!session?.user || session.user.role !== "ADMIN") {
+    if (!session?.user || !["SUPERADMIN", "ADMIN", "MANAGER"].includes(session.user.role)) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -35,6 +35,17 @@ export async function POST(
             return NextResponse.json({ error: "Bu MUT zaten işlenmiş" }, { status: 400 })
         }
 
+        // Hiyerarşik Yetki Kontrolü
+        if (session.user.role === "ADMIN") {
+            if (mut.user.panelId !== session.user.panelId) {
+                return NextResponse.json({ error: "Bu MUT'u onaylama yetkiniz yok (Farklı panel)" }, { status: 403 })
+            }
+        } else if (session.user.role === "MANAGER") {
+            if (mut.user.createdById !== session.user.id) {
+                return NextResponse.json({ error: "Bu MUT'u onaylama yetkiniz yok (Farklı ekip)" }, { status: 403 })
+            }
+        }
+
         const newStatus = action === "approve" ? "APPROVED" : "REJECTED"
 
         const updatedMut = await prisma.mut.update({
@@ -46,10 +57,10 @@ export async function POST(
             }
         })
 
-        const adminName = session.user.name || "Admin"
+        const approverName = `${(session.user as any).firstName || ""} ${(session.user as any).lastName || ""}`.trim() || session.user.name || "Yönetici"
         const notificationMessage = action === "approve"
-            ? `${adminName} MUT kaydınızı onayladı.`
-            : `${adminName} MUT kaydınızı reddetti.`
+            ? `${approverName} MUT kaydınızı onayladı.`
+            : `${approverName} MUT kaydınızı reddetti.`
 
         await prisma.notification.create({
             data: {

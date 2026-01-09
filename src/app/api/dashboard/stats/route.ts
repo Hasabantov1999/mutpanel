@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { calculateMutFinances } from "@/lib/calculations"
 import { auth } from "@/lib/auth"
 
 export async function GET(request: NextRequest) {
@@ -12,8 +13,25 @@ export async function GET(request: NextRequest) {
         const { searchParams } = new URL(request.url)
         const startDate = searchParams.get("startDate")
         const endDate = searchParams.get("endDate")
+        const panelId = searchParams.get("panelId")
 
-        const where: Record<string, unknown> = { userId: session.user.id }
+        const where: any = {}
+
+        // Hiyerarşik Filtreleme
+        if (session.user.role === "USER") {
+            where.userId = session.user.id
+        } else if (session.user.role === "MANAGER") {
+            where.OR = [
+                { userId: session.user.id },
+                { user: { createdById: session.user.id } }
+            ]
+        } else if (session.user.role === "ADMIN") {
+            where.user = { panelId: session.user.panelId }
+        } else if (session.user.role === "SUPERADMIN") {
+            if (panelId) {
+                where.user = { panelId: panelId }
+            }
+        }
 
         if (startDate && endDate) {
             where.createdAt = {
@@ -27,45 +45,79 @@ export async function GET(request: NextRequest) {
             include: {
                 manuelYatirimlar: true,
                 manuelCekimler: true,
+                teslimatlar: true,
             },
             orderBy: { createdAt: "desc" },
-        })
+        }) as any[]
 
         // Calculate totals
         let toplamPanelYatirim = 0
         let toplamPanelCekim = 0
         let toplamManuelYatirim = 0
         let toplamManuelCekim = 0
+        let toplamTeslimat = 0
         let toplamDevir = 0
         let toplamKomisyon = 0
+        let toplamAraciKomisyon = 0
+        let toplamTeslimatMasrafi = 0
 
         // Daily data for charts
         const dailyData: Record<string, { yatirim: number; cekim: number }> = {}
 
         muts.forEach((mut) => {
-            const manuelYatirimTotal = mut.manuelYatirimlar.reduce((sum, m) => sum + m.miktar, 0)
-            const manuelCekimTotal = mut.manuelCekimler.reduce((sum, m) => sum + m.miktar, 0)
-            const mutToplamYatirim = mut.panelYatirim + manuelYatirimTotal
+            const finances = calculateMutFinances({
+                panelYatirim: mut.panelYatirim,
+                panelCekim: mut.panelCekim,
+                devir: mut.devir,
+                komisyonOrani: mut.komisyonOrani,
+                araciKomisyonOrani: mut.araciKomisyonOrani,
+                manuelYatirimlar: mut.manuelYatirimlar,
+                manuelCekimler: mut.manuelCekimler,
+                teslimatlar: mut.teslimatlar || []
+            })
 
-            toplamPanelYatirim += mut.panelYatirim
-            toplamPanelCekim += mut.panelCekim
-            toplamManuelYatirim += manuelYatirimTotal
-            toplamManuelCekim += manuelCekimTotal
-            toplamDevir += mut.devir
-            toplamKomisyon += mutToplamYatirim * (mut.komisyonOrani / 100)
+            toplamPanelYatirim += (mut.panelYatirim || 0)
+            toplamPanelCekim += (mut.panelCekim || 0)
+            toplamManuelYatirim += finances.manuelYatirimTotal
+            toplamManuelCekim += finances.manuelCekimTotal
+            toplamTeslimat += finances.teslimatTotal
+            toplamDevir += (mut.devir || 0)
+            toplamKomisyon += finances.komisyon
+            toplamAraciKomisyon += finances.araciKomisyon
+            toplamTeslimatMasrafi += finances.teslimatMasrafiTotal
 
             // Group by date
-            const dateKey = mut.createdAt.toISOString().split("T")[0]
+            const dateKey = mut.createdAt instanceof Date
+                ? mut.createdAt.toISOString().split("T")[0]
+                : new Date(mut.createdAt).toISOString().split("T")[0]
+
             if (!dailyData[dateKey]) {
                 dailyData[dateKey] = { yatirim: 0, cekim: 0 }
             }
-            dailyData[dateKey].yatirim += mut.panelYatirim
-            dailyData[dateKey].cekim += mut.panelCekim
+            dailyData[dateKey].yatirim += (mut.panelYatirim || 0)
+            dailyData[dateKey].cekim += (mut.panelCekim || 0)
         })
 
         const toplamYatirim = toplamPanelYatirim + toplamManuelYatirim
         const toplamCekim = toplamPanelCekim + toplamManuelCekim
-        const kasa = toplamYatirim - toplamCekim + toplamDevir
+
+        // GENEL KASA: Seçili dönemdeki EN GÜNCEL (son) kaydın kasasını gösterir.
+        // Diğer istatistikler (Yatırım, Çekim, Komisyon vb.) dönemlik TOPLAM'dır.
+        let kasa = 0
+        if (muts.length > 0) {
+            const latestMut = muts[0]
+            const latestFinances = calculateMutFinances({
+                panelYatirim: latestMut.panelYatirim,
+                panelCekim: latestMut.panelCekim,
+                devir: latestMut.devir,
+                komisyonOrani: latestMut.komisyonOrani,
+                araciKomisyonOrani: latestMut.araciKomisyonOrani,
+                manuelYatirimlar: latestMut.manuelYatirimlar,
+                manuelCekimler: latestMut.manuelCekimler,
+                teslimatlar: latestMut.teslimatlar || []
+            })
+            kasa = latestFinances.kasa
+        }
 
         // Prepare chart data
         const sortedDates = Object.keys(dailyData).sort()
@@ -80,8 +132,10 @@ export async function GET(request: NextRequest) {
             stats: {
                 toplamYatirim,
                 toplamCekim,
-                devir: kasa,
+                devir: toplamDevir,
                 komisyon: toplamKomisyon,
+                araciKomisyon: toplamAraciKomisyon,
+                kasa: kasa,
             },
             chartData: {
                 labels: labels.length > 0 ? labels : ["Veri Yok"],

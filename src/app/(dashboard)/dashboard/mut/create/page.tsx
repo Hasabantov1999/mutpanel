@@ -2,28 +2,35 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { useSession } from "next-auth/react"
+import { calculateMutFinances } from "@/lib/calculations"
 import Link from "next/link"
 
 interface ManuelEntry {
     id: string
     isim: string
     miktar: string
+    komisyonOrani?: string
 }
 
 export default function CreateMutPage() {
+    const { data: session } = useSession()
     const router = useRouter()
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState("")
 
     const [formData, setFormData] = useState({
+        isim: "",
         panelYatirim: "",
         panelCekim: "",
         devir: "",
         komisyonOrani: "1.25",
+        araciKomisyonOrani: "",
     })
 
     const [manuelYatirimlar, setManuelYatirimlar] = useState<ManuelEntry[]>([])
     const [manuelCekimler, setManuelCekimler] = useState<ManuelEntry[]>([])
+    const [teslimatlar, setTeslimatlar] = useState<ManuelEntry[]>([])
 
     const addManuelYatirim = () => {
         setManuelYatirimlar([
@@ -59,6 +66,23 @@ export default function CreateMutPage() {
         setManuelCekimler(manuelCekimler.filter((m) => m.id !== id))
     }
 
+    const addTeslimat = () => {
+        setTeslimatlar([
+            ...teslimatlar,
+            { id: Date.now().toString(), isim: "", miktar: "", komisyonOrani: "" },
+        ])
+    }
+
+    const updateTeslimat = (id: string, field: "isim" | "miktar" | "komisyonOrani", value: string) => {
+        setTeslimatlar(
+            teslimatlar.map((m) => (m.id === id ? { ...m, [field]: value } : m))
+        )
+    }
+
+    const removeTeslimat = (id: string) => {
+        setTeslimatlar(teslimatlar.filter((m) => m.id !== id))
+    }
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         setError("")
@@ -76,6 +100,13 @@ export default function CreateMutPage() {
                     manuelCekimler: manuelCekimler
                         .filter((m) => m.isim && m.miktar)
                         .map((m) => ({ isim: m.isim, miktar: parseFloat(m.miktar) })),
+                    teslimatlar: teslimatlar
+                        .filter((m) => m.isim && m.miktar)
+                        .map((m) => ({
+                            isim: m.isim,
+                            miktar: parseFloat(m.miktar),
+                            komisyonOrani: m.komisyonOrani ? parseFloat(m.komisyonOrani) : null
+                        })),
                 }),
             })
 
@@ -93,23 +124,39 @@ export default function CreateMutPage() {
         }
     }
 
-    // Calculate totals for preview
+    // Use centralized calculation
     const panelYatirim = parseFloat(formData.panelYatirim) || 0
     const panelCekim = parseFloat(formData.panelCekim) || 0
     const devir = parseFloat(formData.devir) || 0
     const komisyonOrani = parseFloat(formData.komisyonOrani) || 0
-    const manuelYatirimTotal = manuelYatirimlar.reduce(
-        (sum, m) => sum + (parseFloat(m.miktar) || 0),
-        0
-    )
-    const manuelCekimTotal = manuelCekimler.reduce(
-        (sum, m) => sum + (parseFloat(m.miktar) || 0),
-        0
-    )
-    const toplamYatirim = panelYatirim + manuelYatirimTotal
-    const toplamCekim = panelCekim + manuelCekimTotal
-    const kasa = toplamYatirim - toplamCekim + devir
-    const komisyon = toplamYatirim * (komisyonOrani / 100)
+
+    const finances = calculateMutFinances({
+        panelYatirim,
+        panelCekim,
+        devir,
+        komisyonOrani,
+        araciKomisyonOrani: parseFloat(formData.araciKomisyonOrani) || 0,
+        manuelYatirimlar: manuelYatirimlar.map(m => ({ miktar: parseFloat(m.miktar) || 0 })),
+        manuelCekimler: manuelCekimler.map(m => ({ miktar: parseFloat(m.miktar) || 0 })),
+        teslimatlar: teslimatlar.map(t => ({
+            miktar: parseFloat(t.miktar) || 0,
+            komisyonOrani: parseFloat(t.komisyonOrani || "0") || 0
+        })),
+    })
+
+    const {
+        manuelYatirimTotal,
+        manuelCekimTotal,
+        teslimatTotal,
+        teslimatMasrafiTotal,
+        toplamYatirim,
+        toplamCekim,
+        komisyon,
+        araciKomisyon,
+        kasa
+    } = finances
+
+    const araciKomisyonOrani = parseFloat(formData.araciKomisyonOrani) || 0
 
     const formatCurrency = (value: number) => {
         return new Intl.NumberFormat("tr-TR", {
@@ -133,6 +180,21 @@ export default function CreateMutPage() {
                     )}
 
                     <form onSubmit={handleSubmit}>
+                        <div className="form-group mb-6">
+                            <label className="form-label">Kaydetme İsmi</label>
+                            <input
+                                type="text"
+                                className="form-input"
+                                placeholder="Örn: 08.01.2025 MUT Kaydı"
+                                value={formData.isim}
+                                onChange={(e) =>
+                                    setFormData({ ...formData, isim: e.target.value })
+                                }
+                                required
+                            />
+                            <small className="form-help">Bu isim listede arama yaparken kolaylık sağlar.</small>
+                        </div>
+
                         <h3 style={{ marginBottom: "20px", color: "var(--text-dark)" }}>
                             Panel İşlemleri
                         </h3>
@@ -192,11 +254,26 @@ export default function CreateMutPage() {
                                     }
                                 />
                             </div>
+                            {(session?.user?.role === "SUPERADMIN" || session?.user?.role === "ADMIN") && (
+                                <div className="form-group">
+                                    <label className="form-label">Aracı Komisyon Oranı (%) <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(Opsiyonel)</span></label>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        className="form-input"
+                                        placeholder="0.00"
+                                        value={formData.araciKomisyonOrani}
+                                        onChange={(e) =>
+                                            setFormData({ ...formData, araciKomisyonOrani: e.target.value })
+                                        }
+                                    />
+                                </div>
+                            )}
                         </div>
 
-                        {/* Manuel Yatırımlar */}
+                        {/* Manuel Yatırımlar (Eklenecek) */}
                         <h3 style={{ marginTop: "30px", marginBottom: "15px", color: "var(--text-dark)" }}>
-                            Manuel Yatırımlar
+                            Eklenecek (Manuel Yatırım)
                         </h3>
                         <div className="manuel-entries">
                             {manuelYatirimlar.map((entry) => (
@@ -235,9 +312,9 @@ export default function CreateMutPage() {
                             </button>
                         </div>
 
-                        {/* Manuel Çekimler */}
+                        {/* Manuel Çekimler (Düşülecek) */}
                         <h3 style={{ marginTop: "30px", marginBottom: "15px", color: "var(--text-dark)" }}>
-                            Manuel Çekimler
+                            Düşülecek (Manuel Çekim)
                         </h3>
                         <div className="manuel-entries">
                             {manuelCekimler.map((entry) => (
@@ -276,6 +353,63 @@ export default function CreateMutPage() {
                             </button>
                         </div>
 
+                        {/* Teslimatlar */}
+                        <h3 style={{ marginTop: "30px", marginBottom: "15px", color: "var(--text-dark)" }}>
+                            Teslimatlar
+                        </h3>
+                        <div className="manuel-entries">
+
+                            <div style={{ marginTop: "10px", fontSize: "14px", color: "var(--text-muted)", display: "grid", gridTemplateColumns: "1fr 150px 100px 40px", gap: "10px", padding: "0 10px" }}>
+                                <span>Teslimat İsmi</span>
+                                <span>Miktar (₺)</span>
+                                <span>Komisyon (%)</span>
+                                <span></span>
+                            </div>
+                            {teslimatlar.map((entry) => (
+                                <div key={entry.id} className="manuel-entry-row" style={{ gridTemplateColumns: "1fr 140px 100px 40px", gap: "10px", alignItems: "center" }}>
+                                    <input
+                                        type="text"
+                                        className="form-input"
+                                        placeholder="Teslimat İsmi"
+                                        value={entry.isim}
+                                        onChange={(e) =>
+                                            updateTeslimat(entry.id, "isim", e.target.value)
+                                        }
+                                    />
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        className="form-input"
+                                        placeholder="Miktar"
+                                        value={entry.miktar}
+                                        onChange={(e) =>
+                                            updateTeslimat(entry.id, "miktar", e.target.value)
+                                        }
+                                    />
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        className="form-input"
+                                        placeholder="%"
+                                        value={entry.komisyonOrani}
+                                        onChange={(e) =>
+                                            updateTeslimat(entry.id, "komisyonOrani", e.target.value)
+                                        }
+                                    />
+                                    <button
+                                        type="button"
+                                        className="remove-btn"
+                                        onClick={() => removeTeslimat(entry.id)}
+                                    >
+                                        ×
+                                    </button>
+                                </div>
+                            ))}
+                            <button type="button" className="add-entry-btn" onClick={addTeslimat}>
+                                + Teslimat Ekle
+                            </button>
+                        </div>
+
                         <div className="form-actions">
                             <button type="submit" className="btn btn-primary" disabled={loading}>
                                 {loading ? "Kaydediliyor..." : "💾 Kaydet"}
@@ -300,7 +434,7 @@ export default function CreateMutPage() {
                             </span>
                         </div>
                         <div style={{ display: "flex", justifyContent: "space-between" }}>
-                            <span style={{ color: "var(--text-muted)" }}>Manuel Yatırım:</span>
+                            <span style={{ color: "var(--text-muted)" }}>Eklenecek:</span>
                             <span style={{ color: "var(--success)", fontWeight: 600 }}>
                                 {formatCurrency(manuelYatirimTotal)}
                             </span>
@@ -313,19 +447,49 @@ export default function CreateMutPage() {
                             </span>
                         </div>
                         <div style={{ display: "flex", justifyContent: "space-between" }}>
-                            <span style={{ color: "var(--text-muted)" }}>Manuel Çekim:</span>
+                            <span style={{ color: "var(--text-muted)" }}>Düşülecek:</span>
                             <span style={{ color: "var(--danger)", fontWeight: 600 }}>
                                 {formatCurrency(manuelCekimTotal)}
+                            </span>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between" }}>
+                            <span style={{ color: "var(--text-muted)" }}>Teslimat:</span>
+                            <span style={{ color: "var(--danger)", fontWeight: 600 }}>
+                                {formatCurrency(teslimatTotal)}
+                            </span>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between" }}>
+                            <span style={{ color: "var(--text-muted)" }}>Teslimat Masrafı:</span>
+                            <span style={{ color: "var(--danger)", fontWeight: 600 }}>
+                                {formatCurrency(teslimatMasrafiTotal)}
                             </span>
                         </div>
                         <hr style={{ border: "none", borderTop: "1px dashed var(--border)", margin: "5px 0" }} />
                         <div style={{ display: "flex", justifyContent: "space-between" }}>
                             <span style={{ color: "var(--text-muted)" }}>Devir:</span>
-                            <span style={{ fontWeight: 600 }}>{formatCurrency(devir)}</span>
+                            <span style={{ fontWeight: 600, color: devir >= 0 ? "var(--success)" : "var(--danger)" }}>{formatCurrency(devir)}</span>
                         </div>
+                        <div style={{ display: "flex", justifyContent: "space-between" }}>
+                            <span style={{ color: "var(--text-muted)" }}>
+                                Komisyon ({komisyonOrani}%):
+                            </span>
+                            <span style={{ fontWeight: 600, color: "var(--warning)" }}>
+                                {formatCurrency(komisyon)}
+                            </span>
+                        </div>
+                        {(session?.user?.role === "SUPERADMIN" || session?.user?.role === "ADMIN") && araciKomisyonOrani > 0 && (
+                            <div style={{ display: "flex", justifyContent: "space-between" }}>
+                                <span style={{ color: "var(--text-muted)" }}>
+                                    Aracı Komisyon ({araciKomisyonOrani}%):
+                                </span>
+                                <span style={{ fontWeight: 600, color: "var(--info)" }}>
+                                    {formatCurrency(araciKomisyon)}
+                                </span>
+                            </div>
+                        )}
                         <hr style={{ border: "none", borderTop: "2px solid var(--border)", margin: "10px 0" }} />
                         <div style={{ display: "flex", justifyContent: "space-between" }}>
-                            <span style={{ fontWeight: 700, color: "var(--text-dark)" }}>KASA:</span>
+                            <span style={{ fontWeight: 700, color: "var(--text-dark)" }}>GENEL KASA:</span>
                             <span
                                 style={{
                                     fontWeight: 800,
@@ -334,14 +498,6 @@ export default function CreateMutPage() {
                                 }}
                             >
                                 {formatCurrency(kasa)}
-                            </span>
-                        </div>
-                        <div style={{ display: "flex", justifyContent: "space-between" }}>
-                            <span style={{ fontWeight: 700, color: "var(--text-dark)" }}>
-                                Komisyon ({komisyonOrani}%):
-                            </span>
-                            <span style={{ fontWeight: 800, fontSize: "18px", color: "var(--warning)" }}>
-                                {formatCurrency(komisyon)}
                             </span>
                         </div>
                     </div>

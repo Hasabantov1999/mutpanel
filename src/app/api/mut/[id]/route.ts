@@ -15,11 +15,36 @@ export async function GET(
 
         const { id } = await params
 
+        const where: any = { id }
+
+        // Role-based visibility check
+        if (session.user.role === "USER") {
+            where.userId = session.user.id
+        } else if (session.user.role === "MANAGER") {
+            where.OR = [
+                { userId: session.user.id },
+                { user: { createdById: session.user.id } }
+            ]
+        } else if (session.user.role === "ADMIN") {
+            where.user = { panelId: session.user.panelId }
+        }
+
         const mut = await prisma.mut.findFirst({
-            where: { id, userId: session.user.id },
+            where,
             include: {
                 manuelYatirimlar: true,
                 manuelCekimler: true,
+                teslimatlar: true,
+                user: {
+                    select: {
+                        id: true,
+                        firstName: true,
+                        lastName: true,
+                        username: true,
+                        groupName: true,
+                        panel: { select: { name: true } }
+                    }
+                }
             },
         })
 
@@ -48,32 +73,50 @@ export async function PUT(
         const { id } = await params
         const body = await request.json()
         const {
+            isim,
             panelYatirim,
             panelCekim,
             devir,
             komisyonOrani,
+            araciKomisyonOrani,
             manuelYatirimlar,
             manuelCekimler,
+            teslimatlar,
         } = body
 
-        const existing = await prisma.mut.findFirst({
-            where: { id, userId: session.user.id },
-        })
+        const where: any = { id }
+
+        // Role-based permission check
+        if (session.user.role === "USER") {
+            where.userId = session.user.id
+        } else if (session.user.role === "MANAGER") {
+            where.OR = [
+                { userId: session.user.id },
+                { user: { createdById: session.user.id } }
+            ]
+        } else if (session.user.role === "ADMIN") {
+            where.user = { panelId: session.user.panelId }
+        }
+
+        const existing = await prisma.mut.findFirst({ where })
 
         if (!existing) {
-            return NextResponse.json({ error: "Kayıt bulunamadı" }, { status: 404 })
+            return NextResponse.json({ error: "Kayıt bulunamadı veya yetkiniz yok" }, { status: 404 })
         }
 
         await prisma.manuelYatirim.deleteMany({ where: { mutId: id } })
         await prisma.manuelCekim.deleteMany({ where: { mutId: id } })
+        await prisma.teslimat.deleteMany({ where: { mutId: id } })
 
         const mut = await prisma.mut.update({
             where: { id },
             data: {
+                isim,
                 panelYatirim: parseFloat(panelYatirim) || 0,
                 panelCekim: parseFloat(panelCekim) || 0,
                 devir: parseFloat(devir) || 0,
                 komisyonOrani: parseFloat(komisyonOrani) || 1.25,
+                araciKomisyonOrani: araciKomisyonOrani ? parseFloat(araciKomisyonOrani) : null,
                 manuelYatirimlar: {
                     create: manuelYatirimlar?.map((m: { isim: string; miktar: number }) => ({
                         isim: m.isim,
@@ -86,10 +129,18 @@ export async function PUT(
                         miktar: parseFloat(String(m.miktar)) || 0,
                     })) || [],
                 },
+                teslimatlar: {
+                    create: teslimatlar?.map((m: { isim: string; miktar: number; komisyonOrani?: number }) => ({
+                        isim: m.isim,
+                        miktar: parseFloat(String(m.miktar)) || 0,
+                        komisyonOrani: m.komisyonOrani ? parseFloat(String(m.komisyonOrani)) : null,
+                    })) || [],
+                },
             },
             include: {
                 manuelYatirimlar: true,
                 manuelCekimler: true,
+                teslimatlar: true,
             },
         })
 
@@ -113,12 +164,24 @@ export async function DELETE(
 
         const { id } = await params
 
-        const existing = await prisma.mut.findFirst({
-            where: { id, userId: session.user.id },
-        })
+        const where: any = { id }
+
+        // Role-based permission check
+        if (session.user.role === "USER") {
+            where.userId = session.user.id
+        } else if (session.user.role === "MANAGER") {
+            where.OR = [
+                { userId: session.user.id },
+                { user: { createdById: session.user.id } }
+            ]
+        } else if (session.user.role === "ADMIN") {
+            where.user = { panelId: session.user.panelId }
+        }
+
+        const existing = await prisma.mut.findFirst({ where })
 
         if (!existing) {
-            return NextResponse.json({ error: "Kayıt bulunamadı" }, { status: 404 })
+            return NextResponse.json({ error: "Kayıt bulunamadı veya yetkiniz yok" }, { status: 404 })
         }
 
         await prisma.mut.delete({ where: { id } })

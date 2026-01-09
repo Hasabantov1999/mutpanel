@@ -21,22 +21,34 @@ export default function DateRangePicker({ onDateChange }: DateRangePickerProps) 
 
     const applyPreset = (presetId: string) => {
         setActivePreset(presetId)
-        const now = new Date()
-        let start = now
-        let end = now
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+
+        let start: Date
+        let end: Date = new Date()
+        end.setHours(23, 59, 59, 999)
 
         switch (presetId) {
             case "today":
-                start = end = now
+                start = new Date(today)
+                end = new Date(today)
                 break
             case "week":
-                start = new Date(now.setDate(now.getDate() - now.getDay()))
+                // Haftanın başlangıcı (Pazartesi)
+                start = new Date(today)
+                const dayOfWeek = start.getDay()
+                const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1 // Pazartesi = 0
+                start.setDate(start.getDate() - diff)
                 end = new Date()
                 break
             case "month":
-                start = new Date(now.getFullYear(), now.getMonth(), 1)
+                // Ayın başlangıcı
+                start = new Date(today.getFullYear(), today.getMonth(), 1)
                 end = new Date()
                 break
+            default:
+                start = new Date(today)
+                end = new Date()
         }
 
         const startStr = start.toISOString().split("T")[0]

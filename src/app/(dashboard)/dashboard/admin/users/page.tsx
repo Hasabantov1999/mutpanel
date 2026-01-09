@@ -1,6 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
+import { useSearchParams } from "next/navigation"
+import { useSession } from "next-auth/react"
 import Link from "next/link"
 import ConfirmModal from "@/components/ConfirmModal"
 
@@ -16,14 +18,24 @@ interface User {
     lastName: string
     email: string
     role: string
+    groupName?: string | null
     panelId: string | null
     panel: { name: string } | null
-    createdBy: { firstName: string; lastName: string } | null
+    createdBy: { firstName: string; lastName: string; role: string } | null
     createdAt: string
     _count: { muts: number }
 }
 
 export default function AdminUsersPage() {
+    return (
+        <Suspense fallback={<div className="loading-spinner"><div className="spinner"></div></div>}>
+            <UsersPageContent />
+        </Suspense>
+    )
+}
+
+function UsersPageContent() {
+    const { data: session } = useSession()
     const [users, setUsers] = useState<User[]>([])
     const [panels, setPanels] = useState<Panel[]>([])
     const [loading, setLoading] = useState(true)
@@ -38,10 +50,13 @@ export default function AdminUsersPage() {
         password: "",
         confirmPassword: "",
         role: "USER",
-        panelId: ""
+        panelId: "",
+        groupName: ""
     })
     const [error, setError] = useState("")
     const [submitting, setSubmitting] = useState(false)
+
+    const searchParams = useSearchParams()
 
     const fetchData = async () => {
         try {
@@ -49,12 +64,32 @@ export default function AdminUsersPage() {
                 fetch("/api/admin/users"),
                 fetch("/api/admin/panels")
             ])
-            const usersData = await usersRes.json()
-            const panelsData = await panelsRes.json()
-            setUsers(usersData)
-            setPanels(panelsData)
-        } catch (error) {
+
+            if (!usersRes.ok) {
+                const errData = await usersRes.json().catch(() => ({}))
+                if (usersRes.status === 403) throw new Error("Bu sayfayı görüntüleme yetkiniz yok (403).")
+                throw new Error(errData.error || "Kullanıcılar yüklenemedi")
+            }
+            if (!panelsRes.ok && session?.user?.role !== "MANAGER") {
+                // Panels are optional for manager, but if others fail, log it
+                console.warn("Panels failed to load")
+            }
+
+            const usersData = usersRes.ok ? await usersRes.json() : []
+            // IMPORTANT: If panelsRes is 401 (Manager), we get null/undefined or error object.
+            // We MUST ensure panelsData is an array.
+            let panelsData = []
+            if (panelsRes.ok) {
+                try {
+                    panelsData = await panelsRes.json()
+                } catch (e) { console.error("Panel JSON parse error", e) }
+            }
+
+            setUsers(Array.isArray(usersData) ? usersData : [])
+            setPanels(Array.isArray(panelsData) ? panelsData : [])
+        } catch (error: any) {
             console.error("Failed to fetch data:", error)
+            setError(error.message || "Veriler yüklenirken bir hata oluştu")
         } finally {
             setLoading(false)
         }
@@ -64,17 +99,33 @@ export default function AdminUsersPage() {
         fetchData()
     }, [])
 
+    useEffect(() => {
+        const action = searchParams.get("action")
+        const panelId = searchParams.get("panelId")
+
+        if (action === "create") {
+            setShowForm(true)
+
+            // Set default role based on current user role
+            let targetRole = formData.role
+            if (session?.user?.role === "SUPERADMIN") targetRole = "ADMIN"
+            else if (session?.user?.role === "ADMIN") targetRole = "MANAGER"
+            else if (session?.user?.role === "MANAGER") targetRole = "USER"
+
+            setFormData(prev => ({
+                ...prev,
+                panelId: panelId || prev.panelId,
+                role: targetRole
+            }))
+        }
+    }, [searchParams, session?.user?.role])
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         setError("")
 
         if (formData.password !== formData.confirmPassword) {
             setError("Şifreler eşleşmiyor")
-            return
-        }
-
-        if (formData.role === "USER" && !formData.panelId) {
-            setError("USER rolü için panel seçimi zorunludur")
             return
         }
 
@@ -91,11 +142,17 @@ export default function AdminUsersPage() {
                     email: formData.email,
                     password: formData.password,
                     role: formData.role,
-                    panelId: formData.role === "USER" ? formData.panelId : null
+                    panelId: formData.panelId || null,
+                    groupName: formData.groupName || null
                 })
             })
 
             if (response.ok) {
+                // Determine default role for next creation
+                let defaultRole = "USER"
+                if (session?.user?.role === "SUPERADMIN") defaultRole = "ADMIN"
+                else if (session?.user?.role === "ADMIN") defaultRole = "MANAGER"
+
                 setFormData({
                     username: "",
                     firstName: "",
@@ -103,14 +160,22 @@ export default function AdminUsersPage() {
                     email: "",
                     password: "",
                     confirmPassword: "",
-                    role: "USER",
-                    panelId: ""
+                    role: defaultRole,
+                    panelId: "",
+                    groupName: ""
                 })
                 setShowForm(false)
                 fetchData()
             } else {
-                const data = await response.json()
-                setError(data.error || "Bir hata oluştu")
+                let errorMessage = "Bir hata oluştu"
+                try {
+                    const data = await response.json()
+                    errorMessage = data.error || errorMessage
+                } catch (e) {
+                    console.error("JSON parse error:", e)
+                    errorMessage = "Sunucu hatası (JSON parse fail)"
+                }
+                setError(errorMessage)
             }
         } catch {
             setError("Bir hata oluştu")
@@ -160,6 +225,20 @@ export default function AdminUsersPage() {
                     {showForm ? "İptal" : "+ Yeni Kullanıcı"}
                 </button>
             </div>
+
+            {/* Error Alert */}
+            {error && (
+                <div style={{
+                    padding: "15px",
+                    backgroundColor: "rgba(234, 77, 77, 0.1)",
+                    color: "var(--danger)",
+                    borderRadius: "8px",
+                    marginBottom: "20px",
+                    border: "1px solid var(--danger)"
+                }}>
+                    ❌ {error}
+                </div>
+            )}
 
             {/* Create User Form */}
             {showForm && (
@@ -231,36 +310,98 @@ export default function AdminUsersPage() {
                                     required
                                 />
                             </div>
+                            {/* Role Selection Logic - Strict Hierarchy */}
+
+                            {/* SUPERADMIN: Can create ADMIN or MANAGER or USER */}
+                            {session?.user?.role === "SUPERADMIN" && (
+                                <div className="form-group">
+                                    <label className="form-label">Rol</label>
+                                    <select
+                                        className="form-input"
+                                        value={formData.role}
+                                        onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                                        required
+                                    >
+                                        <option value="">-- Rol Seçin --</option>
+                                        <option value="ADMIN">Admin (Panel Yetkilisi)</option>
+                                        <option value="MANAGER">Manager (Yönetici)</option>
+                                        <option value="USER">Group Holder (Kayıt Yetkilisi)</option>
+                                    </select>
+                                </div>
+                            )}
+
+                            {/* ADMIN: Can ONLY create MANAGER (Locked) */}
+                            {session?.user?.role === "ADMIN" && (
+                                <div className="form-group">
+                                    <label className="form-label">Rol</label>
+                                    <input type="text" className="form-input" value="Manager (Yönetici)" disabled />
+                                    {/* Enforce value in hidden input and formData */}
+                                </div>
+                            )}
+
+                            {/* MANAGER: Can ONLY create USER (Locked) */}
+                            {session?.user?.role === "MANAGER" && (
+                                <div className="form-group">
+                                    <label className="form-label">Rol</label>
+                                    <input type="text" className="form-input" value="Group Holder (Kayıt Yetkilisi)" disabled />
+                                </div>
+                            )}
+
+                            {/* Panel Selection Logic */}
+                            {/* SUPERADMIN: Must select a panel */}
+                            {session?.user?.role === "SUPERADMIN" && (
+                                <div className="form-group">
+                                    <label className="form-label">Panel</label>
+                                    <select
+                                        className="form-input"
+                                        value={formData.panelId}
+                                        onChange={(e) => setFormData({ ...formData, panelId: e.target.value })}
+                                        required
+                                    >
+                                        <option value="">-- Panel Seçin --</option>
+                                        {Array.isArray(panels) && panels.length > 0 && panels.map((panel) => (
+                                            <option key={panel.id} value={panel.id}>
+                                                {panel.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+
+                            {/* ADMIN & MANAGER: Panel is auto-assigned/hidden (Displayed as text for confirmation) */}
+                            {(session?.user?.role === "ADMIN" || session?.user?.role === "MANAGER") && (
+                                <div className="form-group">
+                                    <label className="form-label">Panel</label>
+                                    <input
+                                        type="text"
+                                        className="form-input"
+                                        value={session?.user?.panelName || "Mevcut Panel"}
+                                        disabled
+                                    />
+                                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                                        Yeni kullanıcı bu panele eklenecektir.
+                                    </span>
+                                </div>
+                            )}
                         </div>
-                        <div className="form-row">
-                            <div className="form-group">
-                                <label className="form-label">Rol</label>
-                                <select
-                                    className="form-input"
-                                    value={formData.role}
-                                    onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                                >
-                                    <option value="USER">User</option>
-                                    <option value="ADMIN">Admin</option>
-                                </select>
+
+                        {/* Group Name - Only for Group Holders (USER) */}
+                        {/* Only needed when creating a USER, which implies the creator is MANAGER or SUPERADMIN selecting USER */}
+                        {(formData.role === "USER" || session?.user?.role === "MANAGER") && (
+                            <div className="form-row">
+                                <div className="form-group">
+                                    <label className="form-label">Grup Açıklaması <span style={{ color: 'var(--danger)' }}>*</span></label>
+                                    <input
+                                        type="text"
+                                        className="form-input"
+                                        placeholder="Örn: B1 Destek"
+                                        value={formData.groupName}
+                                        onChange={(e) => setFormData({ ...formData, groupName: e.target.value })}
+                                        required
+                                    />
+                                </div>
                             </div>
-                            <div className="form-group">
-                                <label className="form-label">Panel {formData.role === "USER" && "*"}</label>
-                                <select
-                                    className="form-input"
-                                    value={formData.panelId}
-                                    onChange={(e) => setFormData({ ...formData, panelId: e.target.value })}
-                                    disabled={formData.role === "ADMIN"}
-                                >
-                                    <option value="">-- Panel Seçin --</option>
-                                    {panels.map((panel) => (
-                                        <option key={panel.id} value={panel.id}>
-                                            {panel.name}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                        </div>
+                        )}
                         {error && <p className="error-text">{error}</p>}
                         <div className="form-actions">
                             <button
@@ -288,7 +429,7 @@ export default function AdminUsersPage() {
                     <thead>
                         <tr>
                             <th>Kullanıcı</th>
-                            <th>Rol</th>
+                            <th>Rol / Grup</th>
                             <th>Panel</th>
                             <th>MUT Sayısı</th>
                             <th>Oluşturan</th>
@@ -296,8 +437,8 @@ export default function AdminUsersPage() {
                         </tr>
                     </thead>
                     <tbody>
-                        {users.length > 0 ? (
-                            users.map((user) => (
+                        {Array.isArray(users) && users.length > 0 ? (
+                            users.filter(user => user && user.id).map((user) => (
                                 <tr key={user.id}>
                                     <td>
                                         <div>
@@ -309,17 +450,24 @@ export default function AdminUsersPage() {
                                         </div>
                                     </td>
                                     <td>
-                                        <span className={`badge ${user.role === "ADMIN" ? "badge-primary" : "badge-success"}`}>
-                                            {user.role}
-                                        </span>
+                                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                                            <span className={`badge badge-role-${(user.role || 'USER').toLowerCase()}`}>
+                                                {user.role === "USER" ? "GROUP_HOLDER" : (user.role || 'USER')}
+                                            </span>
+                                            {user.groupName && (
+                                                <span className="badge badge-outline" style={{ fontSize: "10px" }}>
+                                                    Grup: {user.groupName}
+                                                </span>
+                                            )}
+                                        </div>
                                     </td>
                                     <td>
                                         {user.panel?.name || "-"}
                                     </td>
-                                    <td>{user._count.muts}</td>
+                                    <td>{user._count?.muts || 0}</td>
                                     <td>
                                         {user.createdBy
-                                            ? `${user.createdBy.firstName} ${user.createdBy.lastName}`
+                                            ? `${user.createdBy.firstName || ''} ${user.createdBy.lastName || ''} (${user.createdBy.role || ''})`
                                             : "-"}
                                     </td>
                                     <td>
@@ -338,7 +486,7 @@ export default function AdminUsersPage() {
                                                     setSelectedUserId(user.id)
                                                     setShowDeleteModal(true)
                                                 }}
-                                                disabled={user.username === "admin"}
+                                                disabled={user.username === "hekimfinance"}
                                             >
                                                 🗑️
                                             </button>

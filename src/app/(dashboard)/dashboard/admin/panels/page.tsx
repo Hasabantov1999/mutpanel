@@ -205,6 +205,14 @@ export default function AdminPanelsPage() {
                                                 </>
                                             ) : (
                                                 <>
+                                                    <Link
+                                                        href={`/dashboard/admin/users?panelId=${panel.id}&action=create`}
+                                                        className="action-btn view"
+                                                        title="Hesap Ekle"
+                                                        style={{ textDecoration: "none", fontSize: "14px" }}
+                                                    >
+                                                        ➕👤
+                                                    </Link>
                                                     <button
                                                         className="action-btn edit"
                                                         title="Düzenle"
