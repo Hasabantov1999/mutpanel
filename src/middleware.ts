@@ -25,3 +25,6 @@ export default auth((req) => {
 export const config = {
     matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"]
 }
+
+// Force Node.js runtime for middleware
+export const runtime = 'nodejs'

@@ -2,7 +2,7 @@ services:
   # PostgreSQL Database
   db:
     image: postgres:16-alpine
-    container_name: mut-demo-db
+    container_name: mutpanel-db
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-mutadmin}
@@ -12,28 +12,71 @@ services:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
+    networks:
+      - mutpanel-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mutadmin}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mutadmin} -d ${POSTGRES_DB:-mutpanel}"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
+
+  # Migration Runner (runs once)
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+    container_name: mutpanel-migrate
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-mutadmin}:${POSTGRES_PASSWORD:-MutPanel2024!}@db:5432/${POSTGRES_DB:-mutpanel}?schema=public
+    networks:
+      - mutpanel-network
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "
+        echo '🔄 Running Prisma migrations...' &&
+        npx prisma migrate deploy &&
+        echo '🌱 Running database seed...' &&
+        npx prisma db seed &&
+        echo '✅ Migration and seed completed successfully'
+      "
+    restart: "no"
 
   # Next.js Application
   app:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: mut-demo-app
+    container_name: mutpanel-app
     restart: unless-stopped
     ports:
-      - "80:3000"
+      - "${APP_PORT:-80}:3000"
     environment:
+      - NODE_ENV=production
       - DATABASE_URL=postgresql://${POSTGRES_USER:-mutadmin}:${POSTGRES_PASSWORD:-MutPanel2024!}@db:5432/${POSTGRES_DB:-mutpanel}?schema=public
       - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost}
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-super-secret-key-change-in-production}
+    networks:
+      - mutpanel-network
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
 volumes:
   postgres_data:
+    driver: local
+
+networks:
+  mutpanel-network:
+    driver: bridge

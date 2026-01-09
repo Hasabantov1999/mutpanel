@@ -39,35 +39,44 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 password: { label: "Password", type: "password" }
             },
             async authorize(credentials) {
-                if (!credentials?.username || !credentials?.password) {
+                try {
+                    if (!credentials?.username || !credentials?.password) {
+                        console.error('[Auth] Missing credentials')
+                        return null
+                    }
+
+                    const user = await prisma.user.findUnique({
+                        where: { username: credentials.username as string },
+                        include: { panel: true }
+                    })
+
+                    if (!user) {
+                        console.error('[Auth] User not found:', credentials.username)
+                        return null
+                    }
+
+                    const isPasswordValid = await bcrypt.compare(
+                        credentials.password as string,
+                        user.password
+                    )
+
+                    if (!isPasswordValid) {
+                        console.error('[Auth] Invalid password for user:', credentials.username)
+                        return null
+                    }
+
+                    console.log('[Auth] Login successful for user:', credentials.username)
+                    return {
+                        id: user.id,
+                        email: user.email,
+                        name: `${user.firstName} ${user.lastName}`,
+                        role: user.role,
+                        panelId: user.panelId,
+                        panelName: user.panel?.name || null,
+                    }
+                } catch (error) {
+                    console.error('[Auth] Authorization error:', error)
                     return null
-                }
-
-                const user = await prisma.user.findUnique({
-                    where: { username: credentials.username as string },
-                    include: { panel: true }
-                })
-
-                if (!user) {
-                    return null
-                }
-
-                const isPasswordValid = await bcrypt.compare(
-                    credentials.password as string,
-                    user.password
-                )
-
-                if (!isPasswordValid) {
-                    return null
-                }
-
-                return {
-                    id: user.id,
-                    email: user.email,
-                    name: `${user.firstName} ${user.lastName}`,
-                    role: user.role,
-                    panelId: user.panelId,
-                    panelName: user.panel?.name || null,
                 }
             }
         })
