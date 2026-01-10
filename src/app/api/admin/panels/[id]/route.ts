@@ -111,15 +111,26 @@ export async function DELETE(
             return NextResponse.json({ error: "Panel bulunamadı" }, { status: 404 })
         }
 
-        if (panel._count.users > 0) {
-            return NextResponse.json({
-                error: `Bu panelde ${panel._count.users} adet kullanıcı var. Silmeden önce kullanıcıları taşıyın veya silin.`
-            }, { status: 400 })
-        }
+        // Use a transaction to ensure clean cleanup
+        await prisma.$transaction(async (tx) => {
+            // First delete users (this might cascade to MUTs etc depending on schema, but let's be explicit)
+            // Note: If schema has onDelete: Cascade on user->panel relation, this Step 1 is implicit but harmless.
+            // If schema restricts, we must delete explicitly.
 
-        await prisma.panel.delete({ where: { id } })
+            // Delete all users in panel
+            if (panel._count.users > 0) {
+                await tx.user.deleteMany({
+                    where: { panelId: id }
+                })
+            }
 
-        return NextResponse.json({ success: true, message: "Panel başarıyla silindi" })
+            // Then delete panel
+            await tx.panel.delete({
+                where: { id }
+            })
+        })
+
+        return NextResponse.json({ success: true, message: "Panel ve kullanıcıları başarıyla silindi" })
     } catch (error) {
         console.error("Failed to delete panel:", error)
         return NextResponse.json({ error: "Panel silinirken bir hata oluştu" }, { status: 500 })

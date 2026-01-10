@@ -230,7 +230,6 @@ export default function AdminPanelsPage() {
                                                             setSelectedPanelId(panel.id)
                                                             setShowDeleteModal(true)
                                                         }}
-                                                        disabled={panel._count.users > 0}
                                                     >
                                                         🗑️
                                                     </button>
@@ -259,9 +258,9 @@ export default function AdminPanelsPage() {
 
             <ConfirmModal
                 isOpen={showDeleteModal}
-                title="Paneli Sil"
-                message="Bu paneli silmek istediğinizden emin misiniz?"
-                confirmText="Sil"
+                title="DİKKAT: Panel ve Kullanıcılar Silinecek"
+                message="BU PANELE AİT TÜM KULLANICILAR VE VERİLER SİLİNECEKTİR! Bu işlem kesinlikle geri alınamaz. Devam etmek istiyor musunuz?"
+                confirmText="SİL VE YOK ET"
                 cancelText="İptal"
                 type="danger"
                 onConfirm={handleDelete}

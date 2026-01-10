@@ -139,35 +139,50 @@ export default function MutPage() {
     return (
         <div className="mut-list-page">
             {/* Page Header */}
-            <div className="page-header">
-                <h1 className="page-title">MUT Kayıtları</h1>
-                <div className="header-actions">
-                    <form onSubmit={handleSearch} className="search-form" style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <div className="page-header" style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "20px",
+                flexWrap: "wrap",
+                gap: "15px"
+            }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "20px", flex: 1 }}>
+                    <h1 className="page-title" style={{ margin: 0 }}>MUT Kayıtları</h1>
+
+                    {/* Search Input - Left Aligned */}
+                    <div className="search-container" style={{ position: "relative", minWidth: "250px" }}>
+                        <span className="search-icon" style={{
+                            position: "absolute",
+                            left: "12px",
+                            top: "50%",
+                            transform: "translateY(-50%)",
+                            opacity: 0.5
+                        }}>🔍</span>
                         <input
                             type="text"
-                            placeholder="İsim, Kullanıcı veya Grup ara..."
+                            placeholder="İsim, Kullanıcı Adı veya Tarih ara..."
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
-                            // Using inline styles to force the look requested
+                            className="search-input"
                             style={{
-                                padding: "10px 16px",
-                                borderRadius: "20px",
-                                border: "1px solid #e2e8f0",
-                                fontSize: "14px",
-                                width: "260px",
-                                outline: "none",
-                                transition: "all 0.2s",
-                                backgroundColor: "white"
+                                width: "100%",
+                                padding: "10px 10px 10px 35px",
+                                borderRadius: "8px",
+                                border: "1px solid rgba(255,255,255,0.1)",
+                                background: "rgba(255,255,255,0.05)",
+                                color: "white",
+                                fontSize: "14px"
                             }}
                             onFocus={(e) => e.target.style.borderColor = "#3454d1"}
                             onBlur={(e) => e.target.style.borderColor = "#e2e8f0"}
                         />
-                        <button type="submit" className="btn btn-secondary" style={{ borderRadius: "20px", padding: "8px 20px" }}>Ara</button>
-                    </form>
-                    <Link href="/dashboard/mut/create" className="btn btn-primary">
-                        + Yeni Kayıt
-                    </Link>
+                    </div>
                 </div>
+
+                <Link href="/dashboard/mut/create" className="btn btn-primary" style={{ height: "42px", display: "flex", alignItems: "center" }}>
+                    + Yeni Kayıt
+                </Link>
             </div>
 
             {/* Table */}
