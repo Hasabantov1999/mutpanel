@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import ConfirmModal from "@/components/ConfirmModal"
+import MutViewModal from "@/components/MutViewModal"
 import { calculateMutFinances } from "@/lib/calculations"
 
 interface User {
@@ -29,7 +30,16 @@ interface Mut {
     status: string
     createdAt: string
     approvedAt: string | null
-    user: User
+    userId: string
+    user: {
+        id?: string
+        firstName: string
+        lastName: string
+        username: string
+        panel?: { name: string } | null
+        panelId?: string | null
+        createdById?: string | null
+    }
     approvedBy: { firstName: string; lastName: string } | null
     manuelYatirimlar: ManuelEntry[]
     manuelCekimler: ManuelEntry[]
@@ -42,7 +52,9 @@ export default function AdminApprovalsPage() {
     const [filter, setFilter] = useState("PENDING")
     const [showApproveModal, setShowApproveModal] = useState(false)
     const [showRejectModal, setShowRejectModal] = useState(false)
+    const [showDetailModal, setShowDetailModal] = useState(false)
     const [selectedMutId, setSelectedMutId] = useState<string | null>(null)
+    const [selectedMut, setSelectedMut] = useState<Mut | null>(null)
     const [processing, setProcessing] = useState<string | null>(null)
 
     const fetchMuts = async () => {
@@ -222,32 +234,44 @@ export default function AdminApprovalsPage() {
                                             )}
                                         </td>
                                         <td>
-                                            {mut.status === "PENDING" && (
-                                                <div className="table-actions">
-                                                    <button
-                                                        className="action-btn view"
-                                                        title="Onayla"
-                                                        onClick={() => {
-                                                            setSelectedMutId(mut.id)
-                                                            setShowApproveModal(true)
-                                                        }}
-                                                        disabled={processing === mut.id}
-                                                    >
-                                                        ✅
-                                                    </button>
-                                                    <button
-                                                        className="action-btn delete"
-                                                        title="Reddet"
-                                                        onClick={() => {
-                                                            setSelectedMutId(mut.id)
-                                                            setShowRejectModal(true)
-                                                        }}
-                                                        disabled={processing === mut.id}
-                                                    >
-                                                        ❌
-                                                    </button>
-                                                </div>
-                                            )}
+                                            <div className="table-actions">
+                                                <button
+                                                    className="action-btn view"
+                                                    title="Detaylar"
+                                                    onClick={() => {
+                                                        setSelectedMut(mut)
+                                                        setShowDetailModal(true)
+                                                    }}
+                                                >
+                                                    👁️
+                                                </button>
+                                                {mut.status === "PENDING" && (
+                                                    <>
+                                                        <button
+                                                            className="action-btn view"
+                                                            title="Onayla"
+                                                            onClick={() => {
+                                                                setSelectedMutId(mut.id)
+                                                                setShowApproveModal(true)
+                                                            }}
+                                                            disabled={processing === mut.id}
+                                                        >
+                                                            ✅
+                                                        </button>
+                                                        <button
+                                                            className="action-btn delete"
+                                                            title="Reddet"
+                                                            onClick={() => {
+                                                                setSelectedMutId(mut.id)
+                                                                setShowRejectModal(true)
+                                                            }}
+                                                            disabled={processing === mut.id}
+                                                        >
+                                                            ❌
+                                                        </button>
+                                                    </>
+                                                )}
+                                            </div>
                                         </td>
                                     </tr>
                                 )
@@ -288,6 +312,19 @@ export default function AdminApprovalsPage() {
                 type="danger"
                 onConfirm={handleReject}
                 onCancel={() => setShowRejectModal(false)}
+            />
+
+            <MutViewModal
+                mut={selectedMut}
+                isOpen={showDetailModal}
+                onClose={() => {
+                    setShowDetailModal(false)
+                    setSelectedMut(null)
+                }}
+                onSuccess={() => {
+                    fetchMuts()
+                    setShowDetailModal(false)
+                }}
             />
         </div>
     )

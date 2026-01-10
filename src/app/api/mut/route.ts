@@ -85,6 +85,8 @@ export async function GET(request: NextRequest) {
                         lastName: true,
                         username: true,
                         groupName: true,
+                        panelId: true,
+                        createdById: true,
                         panel: { select: { name: true } }
                     }
                 },
