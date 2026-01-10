@@ -99,26 +99,39 @@ function UsersPageContent() {
         fetchData()
     }, [])
 
+    // Initialize form when opening
     useEffect(() => {
-        const action = searchParams.get("action")
-        const panelId = searchParams.get("panelId")
-
-        if (action === "create") {
-            setShowForm(true)
-
+        if (showForm) {
             // Set default role based on current user role
-            let targetRole = formData.role
+            let targetRole = "USER"
             if (session?.user?.role === "SUPERADMIN") targetRole = "ADMIN"
             else if (session?.user?.role === "ADMIN") targetRole = "MANAGER"
             else if (session?.user?.role === "MANAGER") targetRole = "USER"
 
             setFormData(prev => ({
                 ...prev,
-                panelId: panelId || prev.panelId,
-                role: targetRole
+                role: targetRole,
+                password: "",
+                confirmPassword: "",
+                // Keep other fields if we are editing? No, this is for new creation usually.
+                // But let's be safe and just update role.
             }))
         }
-    }, [searchParams, session?.user?.role])
+    }, [showForm, session?.user?.role])
+
+    useEffect(() => {
+        const action = searchParams.get("action")
+        const panelId = searchParams.get("panelId")
+
+        if (action === "create") {
+            setShowForm(true)
+            // panelId logic moved to the showForm effect or handled here?
+            // Actually if we just set showForm(true), the effect above will trigger.
+            if (panelId) {
+                setFormData(prev => ({ ...prev, panelId: panelId }))
+            }
+        }
+    }, [searchParams])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -387,7 +400,9 @@ function UsersPageContent() {
 
                         {/* Group Name - Only for Group Holders (USER) */}
                         {/* Only needed when creating a USER, which implies the creator is MANAGER or SUPERADMIN selecting USER */}
-                        {(formData.role === "USER" || session?.user?.role === "MANAGER") && (
+                        {/* Group Name - Only for Group Holders (USER) */}
+                        {/* Only show if the selected role is explicitly USER */}
+                        {formData.role === "USER" && (
                             <div className="form-row">
                                 <div className="form-group">
                                     <label className="form-label">Grup Açıklaması <span style={{ color: 'var(--danger)' }}>*</span></label>
