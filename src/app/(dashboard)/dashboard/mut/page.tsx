@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
+import { useSession } from "next-auth/react"
 import ConfirmModal from "@/components/ConfirmModal"
 import MutViewModal from "@/components/MutViewModal"
 import { calculateMutFinances } from "@/lib/calculations"
@@ -39,7 +40,8 @@ interface Mut {
     }
 }
 
-export default function MutListPage() {
+export default function MutPage() {
+    const { data: session } = useSession()
     const [muts, setMuts] = useState<Mut[]>([])
     const [loading, setLoading] = useState(true)
     const [deleteId, setDeleteId] = useState<string | null>(null)
@@ -250,21 +252,31 @@ export default function MutListPage() {
                                                 >
                                                     👁️
                                                 </button>
-                                                <Link
-                                                    href={`/dashboard/mut/${mut.id}/edit`}
-                                                    className="action-btn edit"
-                                                    title="Düzenle"
-                                                >
-                                                    ✏️
-                                                </Link>
-                                                <button
-                                                    className="action-btn delete"
-                                                    title="Sil"
-                                                    onClick={() => openDeleteModal(mut.id)}
-                                                    disabled={deleteId === mut.id}
-                                                >
-                                                    {deleteId === mut.id ? "..." : "🗑️"}
-                                                </button>
+
+                                                {/* Only allow Edit/Delete if not approved or if user is not a regular USER (Manager/Admin can always edit unless restricted otherwise, but prompt focuses on Group Holder) */}
+                                                {/* Logic: Group Holder (USER role) can ONLY edit/delete if status is PENDING (not confirmed) */}
+                                                {/* If Status is not PENDING (i.e. APPROVED/REJECTED), USER cannot edit/delete */}
+                                                {/* For Safe side: hide actions if status != PENDING for everyone or specific role? */}
+                                                {/* Prompt: "group holderlar... onaylanmış ise düzenliyemez silemez" */}
+                                                {(session?.user?.role !== "USER" || mut.status === "PENDING") && (
+                                                    <>
+                                                        <Link
+                                                            href={`/dashboard/mut/${mut.id}/edit`}
+                                                            className="action-btn edit"
+                                                            title="Düzenle"
+                                                        >
+                                                            ✏️
+                                                        </Link>
+                                                        <button
+                                                            className="action-btn delete"
+                                                            title="Sil"
+                                                            onClick={() => openDeleteModal(mut.id)}
+                                                            disabled={deleteId === mut.id}
+                                                        >
+                                                            {deleteId === mut.id ? "..." : "🗑️"}
+                                                        </button>
+                                                    </>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>

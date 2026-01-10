@@ -104,6 +104,11 @@ export async function PUT(
             return NextResponse.json({ error: "Kayıt bulunamadı veya yetkiniz yok" }, { status: 404 })
         }
 
+        // Check if Group Holder (USER) tries to edit APPROVED record
+        if (session.user.role === "USER" && existing.status !== "PENDING") {
+            return NextResponse.json({ error: "Onaylanmış veya reddedilmiş kayıtlar düzenlenemez" }, { status: 403 })
+        }
+
         await prisma.manuelYatirim.deleteMany({ where: { mutId: id } })
         await prisma.manuelCekim.deleteMany({ where: { mutId: id } })
         await prisma.teslimat.deleteMany({ where: { mutId: id } })
@@ -182,6 +187,11 @@ export async function DELETE(
 
         if (!existing) {
             return NextResponse.json({ error: "Kayıt bulunamadı veya yetkiniz yok" }, { status: 404 })
+        }
+
+        // Check if Group Holder (USER) tries to delete APPROVED record
+        if (session.user.role === "USER" && existing.status !== "PENDING") {
+            return NextResponse.json({ error: "Onaylanmış veya reddedilmiş kayıtlar silinemez" }, { status: 403 })
         }
 
         await prisma.mut.delete({ where: { id } })
