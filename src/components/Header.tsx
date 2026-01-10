@@ -213,7 +213,10 @@ export default function Header() {
                 confirmText="Çıkış Yap"
                 cancelText="İptal"
                 type="warning"
-                onConfirm={() => signOut({ callbackUrl: "/login" })}
+                onConfirm={async () => {
+                    await signOut({ redirect: false })
+                    window.location.href = "/login"
+                }}
                 onCancel={() => setShowLogoutModal(false)}
             />
         </>

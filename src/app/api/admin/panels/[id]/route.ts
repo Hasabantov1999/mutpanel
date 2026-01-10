@@ -9,8 +9,8 @@ export async function GET(
 ) {
     const session = await auth()
 
-    const isAuthorized = session?.user && ["SUPERADMIN", "ADMIN"].includes(session.user.role)
-    if (!isAuthorized) {
+    // Allow SUPERADMIN, ADMIN, MANAGER to view panel details
+    if (!session?.user || !["SUPERADMIN", "ADMIN", "MANAGER"].includes(session.user.role)) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -50,8 +50,7 @@ export async function PUT(
 ) {
     const session = await auth()
 
-    const isAuthorized = session?.user && ["SUPERADMIN", "ADMIN"].includes(session.user.role)
-    if (!isAuthorized) {
+    if (!session?.user || !["SUPERADMIN", "ADMIN"].includes(session.user.role)) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -64,23 +63,24 @@ export async function PUT(
             return NextResponse.json({ error: "Panel adı gerekli" }, { status: 400 })
         }
 
-        const existingPanel = await prisma.panel.findFirst({
+        // Check name uniqueness (excluding current panel)
+        const existing = await prisma.panel.findFirst({
             where: {
                 name: name.trim(),
                 NOT: { id }
             }
         })
 
-        if (existingPanel) {
-            return NextResponse.json({ error: "Bu panel adı zaten kullanılıyor" }, { status: 400 })
+        if (existing) {
+            return NextResponse.json({ error: "Bu isimde başka bir panel var: " + name }, { status: 400 })
         }
 
-        const panel = await prisma.panel.update({
+        const updated = await prisma.panel.update({
             where: { id },
             data: { name: name.trim() }
         })
 
-        return NextResponse.json(panel)
+        return NextResponse.json(updated)
     } catch (error) {
         console.error("Failed to update panel:", error)
         return NextResponse.json({ error: "Failed to update panel" }, { status: 500 })
@@ -94,9 +94,9 @@ export async function DELETE(
 ) {
     const session = await auth()
 
-    const isAuthorized = session?.user && ["SUPERADMIN", "ADMIN"].includes(session.user.role)
-    if (!isAuthorized) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    // Check if user is SUPERADMIN
+    if (!session?.user || session.user.role !== "SUPERADMIN") {
+        return NextResponse.json({ error: "Sadece Super Admin panel silebilir" }, { status: 403 })
     }
 
     const { id } = await params
@@ -113,15 +113,15 @@ export async function DELETE(
 
         if (panel._count.users > 0) {
             return NextResponse.json({
-                error: "Bu panelde kullanıcılar var. Önce kullanıcıları başka panele taşıyın."
+                error: `Bu panelde ${panel._count.users} adet kullanıcı var. Silmeden önce kullanıcıları taşıyın veya silin.`
             }, { status: 400 })
         }
 
         await prisma.panel.delete({ where: { id } })
 
-        return NextResponse.json({ success: true })
+        return NextResponse.json({ success: true, message: "Panel başarıyla silindi" })
     } catch (error) {
         console.error("Failed to delete panel:", error)
-        return NextResponse.json({ error: "Failed to delete panel" }, { status: 500 })
+        return NextResponse.json({ error: "Panel silinirken bir hata oluştu" }, { status: 500 })
     }
 }
